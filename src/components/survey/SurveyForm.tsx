@@ -12,6 +12,8 @@ import { fetchCatalog, fetchFormCourses } from "../../services/catalog-api";
 import {
   confirmEmailVerification,
   requestEmailVerification,
+  authorizeMasterKey,
+  EmailVerificationError,
 } from "../../services/email-verification-api";
 import { fetchCampaignPublicState } from "../../services/campaign-state-api";
 import {
@@ -47,6 +49,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
   >(null);
   const [verificationError, setVerificationError] = useState("");
   const [verificationLoading, setVerificationLoading] = useState(false);
+  const [emailUnavailable, setEmailUnavailable] = useState(false);
   const [courses, setCourses] = useState<Curso[]>([]);
   const [course, setCourse] = useState<Curso | null>(null);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
@@ -85,6 +88,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
     setVerificationId(null);
     setEmailVerificationToken(null);
     setVerificationError("");
+    setEmailUnavailable(false);
   };
 
   const loadForms = useCallback(async () => {
@@ -186,6 +190,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
       setVerificationId(response.verificationId);
       setStep("pin");
     } catch (error) {
+      if (error instanceof EmailVerificationError && error.status === 503) setEmailUnavailable(true);
       setVerificationError(
         error instanceof Error
           ? error.message
@@ -197,6 +202,25 @@ export function SurveyForm({ campaign }: { campaign: string }) {
     }
   };
   const resend = () => requestCode(email);
+  const useMasterKey = async (chave: string) => {
+    if (requestInFlight.current || !form || !participantType || participantType === "aluno") return;
+    requestInFlight.current = true;
+    setVerificationLoading(true);
+    setVerificationError("");
+    setEmailVerificationToken(null);
+    try {
+      const response = await authorizeMasterKey(chave, participantType, form);
+      setEmailVerificationToken(response.submissionToken);
+      setVerificationId(null);
+      setEmail("");
+      await startAfterVerification();
+    } catch (error) {
+      setVerificationError(error instanceof Error ? error.message : "Não foi possível validar a chave mestra.");
+    } finally {
+      requestInFlight.current = false;
+      setVerificationLoading(false);
+    }
+  };
   const confirmCode = async (pin: string) => {
     if (confirmationInFlight.current || !verificationId) return;
     confirmationInFlight.current = true;
@@ -373,6 +397,8 @@ export function SurveyForm({ campaign }: { campaign: string }) {
       ) : null}
       {step === "email" ? (
         <EmailVerificationStep
+          emailUnavailable={emailUnavailable}
+          onMasterKey={useMasterKey}
           loading={verificationLoading}
           error={verificationError}
           onBack={reset}

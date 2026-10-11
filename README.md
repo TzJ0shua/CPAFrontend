@@ -53,6 +53,14 @@ O Compose encaminha `VITE_API_BASE_URL`, `VITE_KEYCLOAK_URL`, `VITE_KEYCLOAK_REA
 
 As variáveis de banco, CORS, Gmail e administração do servidor Keycloak pertencem ao backend; estão documentadas no README do **CPABackend**. Mantenha `KEYCLOAK_FRONTEND_URL` e as origens CORS alinhadas com a URL pública deste frontend, inclusive quando alterar `FRONTEND_PORT`. As credenciais do Gmail e do banco nunca devem receber o prefixo `VITE_`.
 
+## Acesso dos participantes por email ou chave mestra
+
+Ao entrar como docente ou funcionário, a pesquisa consulta `GET /verificacao-email/configuracao`. Com serviço de email configurado, é possível usar o PIN enviado ao email institucional ou a chave mestra. Sem configuração, o campo de email fica somente para leitura, com o aviso **Serviço de email indisponível** e orientação para inserir a chave mestra. Uma falha no envio também permite recorrer à chave.
+
+A chave é definida como `VERIFICACAO_EMAIL_CHAVE_MESTRA` no `.env` do **backend**, e encaminhada pelo Compose. Não adicione a chave ao `.env` deste frontend nem use `VITE_`: ela é secreta. Veja as instruções no README do CPABackend. Vazia por padrão, desabilita esse método; após configurar, recrie o backend.
+
+O frontend envia a chave somente para `POST /verificacao-email/chave-mestra` e mantém em memória a autorização temporária retornada. A chave não aparece em URLs, armazenamento do navegador nem no payload das respostas. O backend verifica público, formulário publicado e disponibilidade da campanha; usar a chave não libera acesso administrativo.
+
 ## Painel administrativo
 
 Acesse `/admin`. O login usa o Keycloak e exige o papel de realm `cpa-admin`.

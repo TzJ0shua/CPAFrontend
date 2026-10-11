@@ -25,12 +25,12 @@ const options: Array<{
   {
     value: "professor",
     title: "Docente",
-    description: "Vou validar meu e-mail institucional antes de responder.",
+    description: "Vou usar meu e-mail institucional ou a chave mestra para responder.",
   },
   {
     value: "funcionario",
     title: "Funcionário",
-    description: "Vou validar meu e-mail institucional antes de responder.",
+    description: "Vou usar meu e-mail institucional ou a chave mestra para responder.",
   },
 ];
 

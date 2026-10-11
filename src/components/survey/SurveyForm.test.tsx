@@ -5,6 +5,9 @@ import { fetchCatalog, fetchFormCourses } from '../../services/catalog-api'
 import {
   confirmEmailVerification,
   requestEmailVerification,
+  fetchAccessConfiguration,
+  authorizeMasterKey,
+  EmailVerificationError,
 } from '../../services/email-verification-api'
 import { fetchCampaignPublicState } from '../../services/campaign-state-api'
 import { submitSurvey } from '../../services/survey-api'
@@ -14,9 +17,12 @@ vi.mock('../../services/catalog-api', () => ({
   fetchCatalog: vi.fn(),
   fetchFormCourses: vi.fn(),
 }))
-vi.mock('../../services/email-verification-api', () => ({
+vi.mock('../../services/email-verification-api', async importOriginal => ({
+  ...await importOriginal<typeof import('../../services/email-verification-api')>(),
   confirmEmailVerification: vi.fn(),
   requestEmailVerification: vi.fn(),
+  fetchAccessConfiguration: vi.fn(),
+  authorizeMasterKey: vi.fn(),
 }))
 vi.mock('../../services/campaign-state-api', () => ({ fetchCampaignPublicState: vi.fn() }))
 vi.mock('../../services/survey-api', () => ({ submitSurvey: vi.fn() }))
@@ -51,6 +57,8 @@ const staffForm: CatalogForm = {
 }
 
 beforeEach(() => {
+  vi.mocked(fetchAccessConfiguration).mockResolvedValue({ emailDisponivel: true, chaveMestraDisponivel: true })
+  vi.mocked(authorizeMasterKey).mockResolvedValue({ submissionToken: 'master-proof' })
   vi.mocked(fetchCatalog).mockImplementation(async (participantType) =>
     participantType === 'aluno' ? [studentForm] : [staffForm],
   )
@@ -143,6 +151,7 @@ describe('SurveyForm', () => {
     render(<SurveyForm campaign="cpa-2026" />)
 
     continueFromParticipant('Docente')
+    await screen.findByText('Enviaremos um código para confirmar o acesso. Não informaremos se o endereço existe.')
     fireEvent.change(await screen.findByLabelText('E-mail institucional'), {
       target: { value: 'docente@femass.edu.br' },
     })
@@ -166,6 +175,53 @@ describe('SurveyForm', () => {
       aceiteTermosCondicoesServico: true,
       emailVerificationToken: 'opaque-proof',
     })
+  })
+
+  it.each(['professor', 'funcionario'] as const)('acessa como %s com chave sem email e envia apenas autorização opaca', async publico => {
+    const selectedForm = { ...staffForm, audience: publico }
+    vi.mocked(fetchCatalog).mockResolvedValue([selectedForm])
+    vi.mocked(fetchAccessConfiguration).mockResolvedValue({ emailDisponivel: false, chaveMestraDisponivel: true })
+    render(<SurveyForm campaign="cpa-2026" />)
+    continueFromParticipant(publico === 'professor' ? 'Docente' : 'Funcionário')
+    await screen.findByText('Serviço de email indisponível')
+    fireEvent.change(screen.getByLabelText('Chave mestra'), { target: { value: 'chave-secreta-teste' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Acessar com chave mestra' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
+    await waitFor(() => expect(submitSurvey).toHaveBeenCalledTimes(1))
+    expect(authorizeMasterKey).toHaveBeenCalledWith('chave-secreta-teste', publico, selectedForm)
+    expect(requestEmailVerification).not.toHaveBeenCalled()
+    expect(vi.mocked(submitSurvey).mock.calls[0][0].respondent).toEqual({
+      type: publico, aceiteTermosCondicoesServico: true, emailVerificationToken: 'master-proof',
+    })
+    expect(JSON.stringify(vi.mocked(submitSurvey).mock.calls)).not.toContain('chave-secreta-teste')
+  })
+
+  it('deixa email readonly após falha real de envio e permite recorrer à chave', async () => {
+    vi.mocked(requestEmailVerification).mockRejectedValueOnce(new EmailVerificationError('service-unavailable', 503, 'Falha no serviço de email'))
+    render(<SurveyForm campaign="cpa-2026" />)
+    continueFromParticipant('Docente')
+    await screen.findByText('Enviaremos um código para confirmar o acesso. Não informaremos se o endereço existe.')
+    fireEvent.change(screen.getByLabelText('E-mail institucional'), { target: { value: 'docente@femass.edu.br' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }))
+    await screen.findByText('Serviço de email indisponível')
+    expect((screen.getByLabelText('E-mail institucional') as HTMLInputElement).readOnly).toBe(true)
+    fireEvent.change(screen.getByLabelText('Chave mestra'), { target: { value: 'segredo' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Acessar com chave mestra' }))
+    await screen.findByRole('button', { name: 'Sim' })
+    expect(confirmEmailVerification).not.toHaveBeenCalled()
+  })
+
+  it('mantém o acesso bloqueado quando a chave é inválida', async () => {
+    vi.mocked(authorizeMasterKey).mockRejectedValueOnce(new Error('Chave mestra inválida.'))
+    render(<SurveyForm campaign="cpa-2026" />)
+    continueFromParticipant('Docente')
+    await screen.findByText('Enviaremos um código para confirmar o acesso. Não informaremos se o endereço existe.')
+    fireEvent.change(screen.getByLabelText('Chave mestra'), { target: { value: 'errada' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Acessar com chave mestra' }))
+    await screen.findByText('Chave mestra inválida.')
+    expect(screen.queryByRole('button', { name: 'Sim' })).toBeNull()
+    expect(submitSurvey).not.toHaveBeenCalled()
   })
 
   it('shows only one opaque proof representation and keeps it out of URL/logs', async () => {
