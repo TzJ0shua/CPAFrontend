@@ -39,6 +39,7 @@ describe('buildSurveyApiPayload', () => {
     const payload = buildSurveyApiPayload({
       form,
       participantType: 'aluno',
+      studentIdentity: { cpf: '529.982.247-25', matricula: '0001234567' },
       acceptedTerms: true,
       emailVerificationToken: null,
       course: null,
@@ -59,7 +60,7 @@ describe('buildSurveyApiPayload', () => {
       form: 'discente_gestao',
       formVersion: 3,
       comment: 'Comentário livre',
-      respondent: { type: 'aluno', aceiteTermosCondicoesServico: true },
+      respondent: { type: 'aluno', aceiteTermosCondicoesServico: true, cpf: '52998224725', matricula: '0001234567' },
     })
     expect(payload.answers).toEqual([
       { questionId: 'q-obrigatoria', optionCode: 'nao_sei_responder' },

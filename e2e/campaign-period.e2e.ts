@@ -32,6 +32,8 @@ test('seleciona campanha automaticamente e bloqueia ao expirar sem mudar de camp
   await page.goto('/')
   await expect(page.getByRole('button', { name: /Estudante/ })).toBeVisible()
   await page.getByRole('button', { name: /Estudante/ }).click()
+  await page.getByLabel('CPF').fill('52998224725')
+  await page.getByLabel('Matrícula', { exact: true }).fill('0001234567')
   await page.getByRole('checkbox').check()
   await page.getByRole('button', { name: 'Continuar', exact: true }).click()
   await expect(page.getByRole('button', { name: /Pesquisa de outubro/ })).toBeVisible()

@@ -5,6 +5,7 @@ import { fetchWithRetry } from '../utils/fetch-with-retry'
 const SURVEY_API_ENDPOINT = buildApiEndpoint('/formulario')
 
 interface ApiSubmitResponse {
+  code?: string
   error?: string
   message?: string
   receipt?: string
@@ -23,6 +24,7 @@ export interface SubmitSurveyProof {
 }
 
 export interface SubmitSurveyResult {
+  code?: string
   ok: boolean
   status: number
   message: string
@@ -94,6 +96,12 @@ export async function submitSurvey(payload: SurveyApiPayload): Promise<SubmitSur
     }
   }
 
+  if (response.status === 409 && responseBody?.code === 'FORMULARIO_JA_RESPONDIDO') return {
+    ok: false, status: 409, code: 'FORMULARIO_JA_RESPONDIDO', message: 'Você já respondeu esta versão do formulário nesta campanha.',
+  }
+  if (response.status === 503 && responseBody?.code === 'IDENTIFICACAO_INDISPONIVEL') return {
+    ok: false, status: 503, code: 'IDENTIFICACAO_INDISPONIVEL', message: 'A identificação de alunos está indisponível no momento. Tente novamente mais tarde.',
+  }
   return {
     ok: false,
     status: response.status,

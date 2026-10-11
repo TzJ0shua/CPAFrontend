@@ -1,10 +1,15 @@
 import { useState, type FormEvent } from "react";
 import type { ParticipantType } from "../../../lib/survey-types";
 import { Button } from "../ui/Button";
+import { formatCpf, validCpf } from "../../../lib/student-identity";
 
 interface Props {
   participantType: ParticipantType | null;
   acceptedTerms: boolean;
+  cpf: string;
+  matricula: string;
+  onCpfChange: (value: string) => void;
+  onMatriculaChange: (value: string) => void;
   onParticipantTypeChange: (value: ParticipantType) => void;
   onAcceptedTermsChange: (value: boolean) => void;
   onNext: () => void;
@@ -36,7 +41,10 @@ const options: Array<{
 
 export function ParticipantStep(props: Props) {
   const [touched, setTouched] = useState(false);
-  const valid = Boolean(props.participantType) && props.acceptedTerms;
+  const student = props.participantType === "aluno";
+  const cpfError = student && !validCpf(props.cpf);
+  const matriculaError = student && !/^[0-9]{10}$/.test(props.matricula);
+  const valid = Boolean(props.participantType) && props.acceptedTerms && !cpfError && !matriculaError;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setTouched(true);
@@ -78,6 +86,23 @@ export function ParticipantStep(props: Props) {
             </button>
           ))}
         </fieldset>
+        {student ? <div className="space-y-4">
+          <p className="text-sm text-slate-600">CPF e matrícula serão transformados em hashes no servidor para impedir respostas repetidas à mesma versão. Os valores originais não serão armazenados.</p>
+          <label className="grid gap-2 font-bold">CPF
+            <input type="text" inputMode="numeric" autoComplete="off" required maxLength={14} placeholder="000.000.000-00"
+              className="h-12 rounded-lg border border-slate-300 px-4 font-normal" value={props.cpf}
+              onChange={e => props.onCpfChange(formatCpf(e.target.value))}
+              aria-invalid={touched && cpfError} aria-describedby={touched && cpfError ? "cpf-error" : undefined} />
+          </label>
+          {touched && cpfError ? <p id="cpf-error" role="alert" className="text-sm text-red-600">Informe um CPF válido.</p> : null}
+          <label className="grid gap-2 font-bold">Matrícula
+            <input type="text" inputMode="numeric" autoComplete="off" required maxLength={10}
+              className="h-12 rounded-lg border border-slate-300 px-4 font-normal" value={props.matricula}
+              onChange={e => props.onMatriculaChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              aria-invalid={touched && matriculaError} aria-describedby={touched && matriculaError ? "matricula-error" : undefined} />
+          </label>
+          {touched && matriculaError ? <p id="matricula-error" role="alert" className="text-sm text-red-600">Informe uma matrícula com 10 dígitos.</p> : null}
+        </div> : null}
         <label className="flex items-start gap-3 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-600">
           <input
             className="mt-1 shrink-0"

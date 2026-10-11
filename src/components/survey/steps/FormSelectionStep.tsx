@@ -52,6 +52,7 @@ export function FormSelectionStep({
             >
               <strong className="block text-slate-950">{form.name}</strong>
               <small className="mt-2 block leading-relaxed text-slate-500">
+                Versão {form.version} · {" "}
                 {form.scope === "DISCIPLINA"
                   ? "Avaliação por disciplina"
                   : "Avaliação geral"}
@@ -59,6 +60,7 @@ export function FormSelectionStep({
             </button>
           ))}
         </div>
+        {selected?.audience === "aluno" && selected.scope === "DISCIPLINA" ? <p className="text-sm text-slate-600">Selecione todas as disciplinas que deseja avaliar. Cada aluno pode enviar esta versão uma única vez.</p> : null}
         <Actions>
           <Button variant="secondary" onClick={onBack}>
             Voltar

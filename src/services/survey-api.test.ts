@@ -7,7 +7,7 @@ const payload: SurveyApiPayload = {
   form: 'discente_gestao',
   formVersion: 1,
   submittedAt: '2026-10-03T12:00:00.000Z',
-  respondent: { type: 'aluno', aceiteTermosCondicoesServico: true },
+  respondent: { type: 'aluno', aceiteTermosCondicoesServico: true, cpf: '52998224725', matricula: '0001234567' },
   answers: [{ questionId: 'q1', optionCode: 'concordo_totalmente' }],
 }
 
@@ -16,6 +16,10 @@ afterEach(() => {
 })
 
 describe('submitSurvey', () => {
+  it('trata código de duplicidade sem expor a mensagem arbitrária do servidor', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 'FORMULARIO_JA_RESPONDIDO', error: 'cpf secreto' }), { status: 409 })))
+    await expect(submitSurvey(payload)).resolves.toEqual({ ok: false, status: 409, code: 'FORMULARIO_JA_RESPONDIDO', message: 'Você já respondeu esta versão do formulário nesta campanha.' })
+  })
   it('preserves the digest suffix beside the original QR content', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       qrCode: 'opaque-qr-code',
@@ -36,7 +40,7 @@ describe('submitSurvey', () => {
     expect(result.proof).toEqual({ kind: 'qr', value: 'opaque-qr-code' })
   })
 
-  it('posts an anonymous response exactly once', async () => {
+  it('envia identificação no corpo do POST uma única vez', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -45,8 +49,8 @@ describe('submitSurvey', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     const body = JSON.parse(String(init.body))
-    expect(body.respondent).toEqual({ type: 'aluno', aceiteTermosCondicoesServico: true })
-    expect(JSON.stringify(body)).not.toMatch(/cpf|matricula|pin/i)
+    expect(body.respondent).toEqual(payload.respondent)
+    expect(String(fetchMock.mock.calls[0][0])).not.toMatch(/52998224725|0001234567/)
   })
 
   it('does not replay a submission after a network failure', async () => {

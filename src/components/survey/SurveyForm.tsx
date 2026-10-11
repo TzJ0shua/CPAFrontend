@@ -38,6 +38,8 @@ export function SurveyForm({ campaign }: { campaign: string }) {
   const [participantType, setParticipantType] =
     useState<ParticipantType | null>(null);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [cpf, setCpf] = useState("");
+  const [matricula, setMatricula] = useState("");
   const [forms, setForms] = useState<CatalogForm[]>([]);
   const [form, setForm] = useState<CatalogForm | null>(null);
   const [loadingForms, setLoadingForms] = useState(false);
@@ -100,7 +102,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
       setForms(catalog);
       setForm((current) =>
         current
-          ? (catalog.find((item) => item.code === current.code) ?? null)
+          ? (catalog.find((item) => item.code === current.code && item.version === current.version) ?? null)
           : current,
       );
       return catalog;
@@ -139,6 +141,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
   };
   const selectParticipantType = (value: ParticipantType) => {
     if (value !== participantType) {
+      setCpf(""); setMatricula("");
       clearVerification();
       setForms([]);
       setForm(null);
@@ -281,6 +284,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
           subjects: selectedSubjects,
           responses,
           generalResponses,
+          studentIdentity: { cpf, matricula },
         }),
       );
       if (submission.ok && nextForm) {
@@ -303,6 +307,14 @@ export function SurveyForm({ campaign }: { campaign: string }) {
             setStep("form");
           }
         } else setStep("questionnaire");
+        return;
+      }
+      if (!submission.ok && submission.code === "FORMULARIO_JA_RESPONDIDO") {
+        shouldShowConfirmation = false;
+        setResult(null);
+        setForm(null);
+        setFormError("Você já respondeu esta versão do formulário nesta campanha. Escolha outro formulário ou uma nova versão publicada.");
+        setStep("form");
         return;
       }
       if (!submission.ok && [400, 404, 409, 422].includes(submission.status)) {
@@ -353,6 +365,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
     setStep("email");
   };
   const reset = () => {
+    setCpf(""); setMatricula("");
     setStep("participant");
     setParticipantType(null);
     setAcceptedTerms(false);
@@ -374,6 +387,10 @@ export function SurveyForm({ campaign }: { campaign: string }) {
     <main className="grid flex-1 place-items-center py-6 sm:py-10">
       {step === "participant" ? (
         <ParticipantStep
+          cpf={cpf}
+          matricula={matricula}
+          onCpfChange={setCpf}
+          onMatriculaChange={setMatricula}
           participantType={participantType}
           acceptedTerms={acceptedTerms}
           onParticipantTypeChange={selectParticipantType}
@@ -389,7 +406,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
           selected={form}
           loading={loadingForms}
           error={formError}
-          onSelect={setForm}
+          onSelect={value => { setForm(value); setFormError(""); }}
           onRetry={() => void loadForms()}
           onBack={() => setStep("participant")}
           onNext={() => void startForm()}

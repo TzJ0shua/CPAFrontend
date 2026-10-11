@@ -6,6 +6,8 @@ Frontend em React, Vite e Tailwind CSS para coleta de avaliações institucionai
 
 Crie um arquivo `.env` na raiz do projeto. Ele é ignorado pelo Git e não deve receber credenciais ou tokens — tudo que começa com `VITE_` é incorporado ao bundle público do navegador.
 
+Use [`.env.example`](.env.example) como modelo. Ele está alinhado ao exemplo do CPABackend com API em `http://localhost:8081` e frontend Docker na porta `5175`, e inclui alternativas comentadas para os domínios de teste. O bloco abaixo usa as portas locais padrão como alternativa. Após alterar as variáveis `VITE_`, reinicie o Vite ou reconstrua a imagem.
+
 ```env
 # URL pública da API. Sem barra no fim.
 VITE_API_BASE_URL=http://localhost:8080
@@ -52,6 +54,12 @@ O Compose encaminha `VITE_API_BASE_URL`, `VITE_KEYCLOAK_URL`, `VITE_KEYCLOAK_REA
 `VITE_CPA_CAMPAIGN` aparece em configurações antigas, mas não é mais consumida. A pesquisa consulta `/campanhas/atual/disponibilidade` e utiliza a campanha ativa, aberta e dentro do período. Essa variável pode ser removida do `.env`.
 
 As variáveis de banco, CORS, Gmail e administração do servidor Keycloak pertencem ao backend; estão documentadas no README do **CPABackend**. Mantenha `KEYCLOAK_FRONTEND_URL` e as origens CORS alinhadas com a URL pública deste frontend, inclusive quando alterar `FRONTEND_PORT`. As credenciais do Gmail e do banco nunca devem receber o prefixo `VITE_`.
+
+## Identificação dos alunos
+
+Para alunos, CPF válido e matrícula com 10 dígitos são obrigatórios; zeros à esquerda são preservados. Esses dados permanecem em memória no navegador e são enviados no corpo do POST, sem aparecer em URLs ou no QR Code. O backend armazena somente hashes com `VALIDACAO_ALUNO_HASH_SEED`, configurada exclusivamente no backend.
+
+Cada aluno pode responder uma vez por versão de formulário de cada campanha. Reutilizar o CPF **ou** a matrícula nessa versão retorna `409` com `code: FORMULARIO_JA_RESPONDIDO`; a seleção permite escolher outro formulário ou outra versão. Para avaliações por disciplina, selecione todas as disciplinas desejadas antes do envio: não é possível acrescentar disciplinas depois na mesma versão.
 
 ## Acesso dos participantes por email ou chave mestra
 

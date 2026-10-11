@@ -42,6 +42,8 @@ export interface SurveyApiAnswer { questionId: QuestionId; optionCode: string }
 export interface SurveyApiSubject { subjectId: string; subjectName: string; teacherName: string; answers: SurveyApiAnswer[]; comment?: string }
 
 export interface SurveyRespondent {
+  cpf?: string
+  matricula?: string
   type: ParticipantType
   aceiteTermosCondicoesServico: boolean
   /** Comprovante opaco emitido após a confirmação do PIN institucional. */

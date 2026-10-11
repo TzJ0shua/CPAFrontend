@@ -86,11 +86,48 @@ afterEach(() => {
 
 function continueFromParticipant(roleName: string) {
   fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${roleName}`) }))
+  if (roleName === 'Estudante') {
+    fireEvent.change(screen.getByLabelText('CPF'), { target: { value: '52998224725' } })
+    fireEvent.change(screen.getByLabelText('Matrícula'), { target: { value: '0001234567' } })
+  }
   fireEvent.click(screen.getByRole('checkbox'))
   fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
 }
 
 describe('SurveyForm', () => {
+  it('exige identificação válida somente para aluno e limpa ao mudar público', async () => {
+    render(<SurveyForm campaign="cpa-2026" />)
+    fireEvent.click(screen.getByRole('button', { name: /^Estudante/ }))
+    fireEvent.change(screen.getByLabelText('CPF'), { target: { value: '11111111111' } })
+    fireEvent.change(screen.getByLabelText('Matrícula'), { target: { value: '123' } })
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(screen.getByText('Informe um CPF válido.')).not.toBeNull()
+    expect(screen.getByText('Informe uma matrícula com 10 dígitos.')).not.toBeNull()
+    expect(fetchCatalog).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /^Docente/ }))
+    expect(screen.queryByLabelText('CPF')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Estudante/ }))
+    expect((screen.getByLabelText('CPF') as HTMLInputElement).value).toBe('')
+  })
+
+  it('trata repetição por versão e permite escolher versão diferente mantendo identificação', async () => {
+    vi.mocked(fetchCatalog).mockResolvedValue([studentForm, { ...studentForm, version: 2, name: 'Nova versão' }])
+    vi.mocked(submitSurvey).mockResolvedValueOnce({ ok: false, status: 409, code: 'FORMULARIO_JA_RESPONDIDO', message: 'Duplicado' })
+    render(<SurveyForm campaign="cpa-2026" />)
+    continueFromParticipant('Estudante')
+    fireEvent.click(await screen.findByRole('button', { name: /^Avaliação discente/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
+    await screen.findByText('Você já respondeu esta versão do formulário nesta campanha. Escolha outro formulário ou uma nova versão publicada.')
+    fireEvent.click(screen.getByRole('button', { name: /^Nova versão/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
+    await waitFor(() => expect(submitSurvey).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(submitSurvey).mock.calls[1][0]).toMatchObject({ formVersion: 2, respondent: { cpf: '52998224725', matricula: '0001234567' } })
+  })
   it('revalida a campanha e bloqueia o POST quando ela encerra durante o preenchimento', async () => {
     vi.mocked(fetchCampaignPublicState).mockResolvedValueOnce({
       campaign: "cpa-2026",
@@ -110,7 +147,7 @@ describe('SurveyForm', () => {
     expect(submitSurvey).not.toHaveBeenCalled()
   })
 
-  it('keeps student submissions anonymous and blocks a double submission', async () => {
+  it('envia identificação do aluno apenas no POST e bloqueia duplo clique', async () => {
     let resolveSubmission: () => void = () => undefined
     vi.mocked(submitSurvey).mockImplementation(
       () =>
@@ -126,8 +163,8 @@ describe('SurveyForm', () => {
     render(<SurveyForm campaign="cpa-2026" />)
 
     continueFromParticipant('Estudante')
-    expect(screen.queryByLabelText('CPF')).toBeNull()
-    expect(screen.queryByLabelText('Matrícula')).toBeNull()
+    expect((screen.getByLabelText('CPF') as HTMLInputElement).value).toBe('529.982.247-25')
+    expect((screen.getByLabelText('Matrícula') as HTMLInputElement).value).toBe('0001234567')
 
     fireEvent.click(await screen.findByRole('button', { name: /^Avaliação discente/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
@@ -142,6 +179,8 @@ describe('SurveyForm', () => {
     expect(payload.respondent).toEqual({
       type: 'aluno',
       aceiteTermosCondicoesServico: true,
+      cpf: '52998224725',
+      matricula: '0001234567',
     })
     resolveSubmission()
     await screen.findByRole('heading', { name: 'Avaliação enviada' })
