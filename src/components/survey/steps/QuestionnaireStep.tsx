@@ -115,6 +115,7 @@ export function QuestionnaireStep({
             ) : null}
             <textarea
               className="min-h-32 rounded-lg border border-slate-300 p-3 text-base font-normal"
+              maxLength={1000}
               required={isCommentRequired(form)}
               value={respostas.comentario}
               onChange={(e) =>

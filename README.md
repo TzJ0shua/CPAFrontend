@@ -71,6 +71,10 @@ O frontend envia a chave somente para `POST /verificacao-email/chave-mestra` e m
 
 ## Painel administrativo
 
+Docentes e funcionários autenticados por PIN podem responder cada versão de formulário uma única vez por email confirmado na campanha. Um novo PIN não libera outra resposta da mesma versão; outra versão ou outro formulário continuam permitidos. A identidade é obtida pelo backend a partir da autorização opaca, e o email não é incluído no POST das respostas. O conflito `FORMULARIO_JA_RESPONDIDO` retorna à seleção para permitir outra escolha, preservando a autorização durante sua validade. O acesso por chave mestra continua como exceção ao limite por email.
+
+O campo **Comentários adicionais** depende da opção **Permitir comentário** de cada versão, que começa desmarcada nos novos rascunhos e está desabilitada em vários formulários iniciais. Abra a versão em rascunho, marque essa opção, preencha o aviso, salve e publique. Versões publicadas exigem clonagem antes de alterar essa configuração. O editor informa se o campo aparecerá na pesquisa; quando habilitado, o comentário é opcional e limitado a 1000 caracteres, tanto na avaliação geral quanto por disciplina.
+
 Acesse `/admin`. O login usa o Keycloak e exige o papel de realm `cpa-admin`.
 A pesquisa pública não inicializa a autenticação. Os tokens ficam apenas em memória;
 as requisições administrativas renovam o token e enviam `Authorization: Bearer`.

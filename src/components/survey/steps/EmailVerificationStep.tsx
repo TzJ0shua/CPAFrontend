@@ -93,7 +93,7 @@ export function EmailVerificationStep({
         {!emailAvailable && !checking ? <div id="email-service-status" className="text-sm text-amber-800">
           <p className="font-bold">Serviço de email indisponível</p>
           <p>Insira a chave mestra para prosseguir.</p>
-        </div> : emailAvailable ? <p className="text-sm text-slate-600">Enviaremos um código para confirmar o acesso. Não informaremos se o endereço existe.</p> : null}
+        </div> : emailAvailable ? <><p className="text-sm text-slate-600">Enviaremos um código para confirmar o acesso. Não informaremos se o endereço existe.</p><p className="text-sm text-slate-600">Cada email pode responder uma vez por versão de formulário nesta campanha.</p></> : null}
         {validationError ? (
           <p
             id="institutional-email-error"

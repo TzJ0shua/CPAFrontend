@@ -7,6 +7,17 @@ import type { FormInput } from './types'
 const initial: FormInput = { codigo: 'geral', nome: 'Avaliação', publico: 'aluno', escopo: 'GERAL', ordem: 1, commentAllowed: false, commentNotice: null, perguntas: [{ id: 10, codigo: 'q1', texto: 'Pergunta', ordem: 1, ativo: true, opcoes: [{ id: 20, code: 'sim', label: 'Sim', value: 1, naoSeiResponder: false, ativo: true }] }] }
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 describe('editor de formulários', () => {
+  it('explica a configuração de comentários e salva o campo habilitado com aviso', async () => {
+    const save = vi.fn().mockResolvedValue(undefined)
+    render(<FormEditor initial={initial} busy={false} onSave={save} />)
+    expect(screen.getByText(/Comentários desabilitados/)).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Permitir comentário'))
+    expect(screen.getByText(/O campo Comentários adicionais será exibido/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Aviso sobre o comentário'), { target: { value: 'Comentário opcional.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }))
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect(save.mock.calls[0][0]).toMatchObject({ commentAllowed: true, commentNotice: 'Comentário opcional.' })
+  })
   it('desativa itens preservando ids no envio do rascunho', async () => {
     const save = vi.fn().mockResolvedValue(undefined)
     render(<FormEditor initial={initial} busy={false} onSave={save} />)
