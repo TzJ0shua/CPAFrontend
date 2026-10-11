@@ -5,7 +5,7 @@ import { FormEditor } from './FormsPage'
 import type { FormInput } from './types'
 
 const initial: FormInput = { codigo: 'geral', nome: 'Avaliação', publico: 'aluno', escopo: 'GERAL', ordem: 1, commentAllowed: false, commentNotice: null, perguntas: [{ id: 10, codigo: 'q1', texto: 'Pergunta', ordem: 1, ativo: true, opcoes: [{ id: 20, code: 'sim', label: 'Sim', value: 1, naoSeiResponder: false, ativo: true }] }] }
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
 describe('editor de formulários', () => {
   it('desativa itens preservando ids no envio do rascunho', async () => {
     const save = vi.fn().mockResolvedValue(undefined)
@@ -21,6 +21,7 @@ describe('editor de formulários', () => {
     expect(screen.getAllByLabelText('Ativa')[0]).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Salvar rascunho' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Adicionar pergunta' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remover pergunta' })).not.toBeInTheDocument()
   })
   it('transforma não sei responder em valor nulo', async () => {
     const save = vi.fn().mockResolvedValue(undefined)
@@ -30,5 +31,39 @@ describe('editor de formulários', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }))
     await waitFor(() => expect(save).toHaveBeenCalledOnce())
     expect(save.mock.calls[0][0].perguntas[0].opcoes[0]).toMatchObject({ value: null, naoSeiResponder: true })
+  })
+  it('remove uma pergunta salva e permite reativá-la preservando seus ids', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const save = vi.fn().mockResolvedValue(undefined)
+    const dirty = vi.fn()
+    render(<FormEditor initial={initial} busy={false} onSave={save} onDirtyChange={dirty} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remover pergunta' }))
+    expect(screen.queryByLabelText('Texto')).not.toBeInTheDocument()
+    expect(screen.getByText(/Nenhuma pergunta ativa/)).toBeInTheDocument()
+    expect(dirty).toHaveBeenCalledWith(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }))
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect(save.mock.calls[0][0].perguntas[0]).toMatchObject({ id: 10, ativo: false, opcoes: [{ id: 20 }] })
+    fireEvent.click(screen.getByLabelText('Mostrar perguntas desativadas'))
+    fireEvent.click(screen.getAllByLabelText('Ativa')[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save.mock.calls[1][0].perguntas[0]).toMatchObject({ id: 10, ativo: true })
+  })
+  it('remove uma pergunta nova incompleta sem bloquear o salvamento', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const save = vi.fn().mockResolvedValue(undefined)
+    render(<FormEditor initial={initial} busy={false} onSave={save} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar pergunta' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remover pergunta' })[1])
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }))
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect(save.mock.calls[0][0].perguntas).toHaveLength(1)
+  })
+  it('mantém a pergunta quando a remoção é cancelada', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<FormEditor initial={initial} busy={false} onSave={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remover pergunta' }))
+    expect(screen.getByLabelText('Texto')).toHaveValue('Pergunta')
   })
 })

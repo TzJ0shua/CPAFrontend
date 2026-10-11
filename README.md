@@ -79,6 +79,10 @@ e atribua `cpa-admin` aos usuários da comissão. Veja também as instruções d
 existente no README do backend.
 
 O painel oferece campanhas, cursos, disciplinas e formulários versionados.
+Na listagem de formulários de uma campanha em rascunho ou aprovada, use **Clonar de outra campanha**. Escolha a campanha, o formulário e a versão de origem, incluindo campanhas encerradas ou inativas, e informe o código e nome da cópia. Será criado um novo formulário ativo, com versão 1 em rascunho e identificadores próprios; a campanha de destino volta ao estado de rascunho. O conteúdo e as respostas da origem permanecem preservados.
+
+No editor do rascunho, **Remover pergunta** retira a pergunta do questionário. Perguntas já salvas são desativadas e podem ser recuperadas em **Mostrar perguntas desativadas**; perguntas novas ainda não salvas são descartadas. Salve o rascunho para efetivar as alterações. Um rascunho pode ficar sem perguntas, mas a publicação exige pelo menos uma pergunta ativa com opções ativas. Versões publicadas permanecem somente para leitura.
+
 Desativar mantém o registro; um pai inativo oculta seus filhos da pesquisa sem
 alterar a ativação individual deles. Versões publicadas são somente para leitura:
 clone a versão mais recente para editar um novo rascunho. Salve o rascunho antes

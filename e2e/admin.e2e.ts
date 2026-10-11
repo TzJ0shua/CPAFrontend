@@ -148,3 +148,71 @@ test('exige salvar alterações antes de publicar um rascunho', async ({ page })
   await expect(page.getByRole('textbox', { name: 'Texto', exact: true })).toBeDisabled()
   await expect(page.getByRole('textbox', { name: 'Texto', exact: true })).toHaveValue('Pergunta atualizada')
 })
+
+test('clona formulário de campanha encerrada e remove perguntas do rascunho', async ({ page }, testInfo) => {
+  await mockServices(page)
+  const target = { id: 1, codigo: 'cpa-2026', nome: 'Campanha atual', estado: 'RASCUNHO', ativo: true }
+  const origin = { id: 2, codigo: 'cpa-2025', nome: 'Campanha antiga', estado: 'ENCERRADA', ativo: false }
+  const original = { id: 2, numero: 1, codigo: 'geral', nome: 'Formulário histórico', publico: 'aluno', escopo: 'GERAL', ordem: 1,
+    commentAllowed: false, commentNotice: null, estado: 'PUBLICADA', ativo: false,
+    perguntas: [{ id: 10, codigo: 'q1', texto: 'Pergunta histórica', ordem: 1, ativo: true,
+      opcoes: [{ id: 20, code: 'sim', label: 'Sim', value: 1, naoSeiResponder: false, ativo: true }] }] }
+  const copy = { ...structuredClone(original), id: 3, codigo: 'copia', estado: 'RASCUNHO', ativo: true }
+  copy.perguntas[0].id = 30; copy.perguntas[0].opcoes[0].id = 40
+  await page.route('http://127.0.0.1:8199/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    const method = route.request().method()
+    const headers = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:5194', 'Access-Control-Allow-Headers': 'authorization,content-type', 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,OPTIONS' }
+    if (method === 'OPTIONS') return route.fulfill({ status: 204, headers })
+    if (path.startsWith('/admin/')) expect(route.request().headers().authorization).toMatch(/^Bearer /)
+    if (path === '/admin/campanhas') return route.fulfill({ json: [target, origin], headers })
+    if (path === '/admin/campanhas/cpa-2026') return route.fulfill({ json: target, headers })
+    if (path === '/admin/campanhas/cpa-2026/formularios') return route.fulfill({ json: [], headers })
+    if (path === '/admin/campanhas/cpa-2025/formularios') return route.fulfill({ json: [{ id: 2, codigo: 'geral', nome: original.nome, publico: 'aluno', ativo: false }], headers })
+    if (path === '/admin/campanhas/cpa-2025/formularios/geral/versoes') return route.fulfill({ json: [original], headers })
+    if (path === '/admin/campanhas/cpa-2025/formularios/geral/versoes/1') return route.fulfill({ json: original, headers })
+    if (path === '/admin/campanhas/cpa-2026/formularios/clonar' && method === 'POST') {
+      expect(route.request().postDataJSON()).toMatchObject({ campanhaOrigem: 'cpa-2025', formularioOrigem: 'geral', versaoOrigem: 1, codigo: 'copia' })
+      return route.fulfill({ status: 201, json: { codigo: 'copia', versao: 1 }, headers })
+    }
+    if (path === '/admin/campanhas/cpa-2026/formularios/copia/versoes/1') {
+      if (method === 'PUT') {
+        Object.assign(copy, route.request().postDataJSON())
+        return route.fulfill({ status: 204, headers })
+      }
+      return route.fulfill({ json: copy, headers })
+    }
+    return route.fallback()
+  })
+  await page.goto('/admin/campanhas/cpa-2026/formularios')
+  await page.getByRole('button', { name: 'Clonar de outra campanha' }).click()
+  await page.getByLabel('Campanha de origem').selectOption('cpa-2025')
+  await page.getByLabel('Formulário de origem').selectOption('geral')
+  await page.getByLabel('Versão de origem').selectOption('1')
+  await page.getByLabel('Código do novo formulário').fill('copia')
+  await page.screenshot({ path: testInfo.outputPath('clonar-campanha-antiga.png'), fullPage: true })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Criar cópia em rascunho' }).click()
+  await expect(page).toHaveURL(/\/copia\/versoes\/1$/)
+  await expect(page.getByRole('textbox', { name: 'Texto', exact: true })).toHaveValue('Pergunta histórica')
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Remover pergunta' }).click()
+  await expect(page.getByRole('textbox', { name: 'Texto', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Publicar versão salva' })).toBeDisabled()
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Salvar rascunho' }).click()
+  await expect(page.getByText('Operação concluída.')).toBeVisible()
+  await page.reload()
+  await expect(page.getByText(/Nenhuma pergunta ativa/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Publicar versão salva' })).toBeDisabled()
+  await page.getByLabel('Mostrar perguntas desativadas').check()
+  await expect(page.getByRole('textbox', { name: 'Texto', exact: true })).toHaveValue('Pergunta histórica')
+  expect(copy.perguntas[0].id).toBe(30)
+  expect(copy.perguntas[0].ativo).toBe(false)
+  await page.goto('/admin/campanhas/cpa-2025/formularios/geral/versoes/1')
+  await expect(page.getByRole('textbox', { name: 'Texto', exact: true })).toHaveValue('Pergunta histórica')
+  await expect(page.getByRole('textbox', { name: 'Texto', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Remover pergunta' })).toHaveCount(0)
+  expect(original.perguntas[0].ativo).toBe(true)
+})
