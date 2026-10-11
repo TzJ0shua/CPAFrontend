@@ -1,14 +1,15 @@
 import Keycloak from 'keycloak-js'
+import { publicConfig } from '../config/runtime'
 
 let client: Keycloak | undefined
 let initialization: Promise<Keycloak> | undefined
 
 export function initializeAdminAuth(): Promise<Keycloak> {
   if (initialization) return initialization
-  const url = import.meta.env.VITE_KEYCLOAK_URL?.trim()
-  const realm = import.meta.env.VITE_KEYCLOAK_REALM?.trim()
+  const url = publicConfig('VITE_KEYCLOAK_URL')
+  const realm = publicConfig('VITE_KEYCLOAK_REALM')
   if (!url || !realm) return Promise.reject(new Error('Configure a URL e o realm do Keycloak para acessar o painel.'))
-  client = new Keycloak({ url, realm, clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID?.trim() || 'cpa-frontend' })
+  client = new Keycloak({ url, realm, clientId: publicConfig('VITE_KEYCLOAK_CLIENT_ID') || 'cpa-frontend' })
   const instance = client
   initialization = instance.init({ onLoad: 'login-required', pkceMethod: 'S256', flow: 'standard', checkLoginIframe: false,
     redirectUri: window.location.origin + window.location.pathname,

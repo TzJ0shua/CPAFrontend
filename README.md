@@ -4,9 +4,9 @@ Frontend em React, Vite e Tailwind CSS para coleta de avaliações institucionai
 
 ## Configuração
 
-Crie um arquivo `.env` na raiz do projeto. Ele é ignorado pelo Git e não deve receber credenciais ou tokens — tudo que começa com `VITE_` é incorporado ao bundle público do navegador.
+Crie um arquivo `.env` na raiz do projeto. Ele é ignorado pelo Git e não deve receber credenciais ou tokens — as configurações `VITE_` são públicas e acessíveis pelo navegador.
 
-Use [`.env.example`](.env.example) como modelo. Ele está alinhado ao exemplo do CPABackend com API em `http://localhost:8081` e frontend Docker na porta `5175`, e inclui alternativas comentadas para os domínios de teste. O bloco abaixo usa as portas locais padrão como alternativa. Após alterar as variáveis `VITE_`, reinicie o Vite ou reconstrua a imagem.
+Use [`.env.example`](.env.example) como modelo. Ele está alinhado ao exemplo do CPABackend com API em `http://localhost:8081` e frontend Docker na porta `5175`, e inclui alternativas comentadas para os domínios de teste. O bloco abaixo usa as portas locais padrão como alternativa. Após alterar as variáveis `VITE_`, reinicie o Vite ou recrie o contêiner Docker.
 
 ```env
 # URL pública da API. Sem barra no fim.
@@ -45,9 +45,37 @@ docker compose up -d --build
 | `FRONTEND_PORT` | Porta publicada pelo Compose para o Nginx, que escuta na porta interna `80`. | `5173`; não altera a porta do servidor `npm run dev`. |
 | `PLAYWRIGHT_CHANNEL` | Navegador usado por `npm run test:e2e`. | `msedge`; pode ser `chrome` se instalado. É lida pelo processo de testes, não pelo bundle. |
 
-Todas as variáveis `VITE_` são resolvidas ao iniciar o Vite ou construir o bundle; reconstrua a imagem após alterá-las. Defini-las apenas no ambiente do contêiner Nginx já construído não altera o frontend. `import.meta.env.DEV` é uma informação automática do Vite, não uma variável para preencher no `.env`.
+No Vite local, as variáveis `VITE_` são resolvidas ao iniciar o servidor ou construir o bundle. Na imagem Docker, o script de inicialização gera `/runtime-config.js` com as cinco configurações públicas da tabela, antes de iniciar o Nginx. Elas têm prioridade sobre os valores do build e esse arquivo é servido com `Cache-Control: no-store`. Alterações exigem recriar o contêiner e recarregar a página; não é necessário reconstruir a imagem. `import.meta.env.DEV` é uma informação automática do Vite, não uma variável para preencher no `.env`.
 
-O Compose encaminha `VITE_API_BASE_URL`, `VITE_KEYCLOAK_URL`, `VITE_KEYCLOAK_REALM` e `VITE_KEYCLOAK_CLIENT_ID` como argumentos de build. `VITE_CPA_CAMPAIGN_UNAVAILABLE_MESSAGE` não tem argumento de build no Dockerfile atual: configure-a no `.env` ou `.env.production` dentro do contexto de build, que o Vite lê durante `npm run build`. Para testes, exporte `PLAYWRIGHT_CHANNEL` no terminal antes do comando; o Playwright não carrega automaticamente o `.env` do Vite.
+O Compose encaminha as cinco configurações públicas como variáveis de ambiente do contêiner. Arquivos `.env*` ficam fora do contexto Docker. O Dockerfile ainda aceita os argumentos de build da API e do Keycloak para builds personalizados; a imagem publicada não incorpora URLs de um ambiente específico. Para testes, exporte `PLAYWRIGHT_CHANNEL` no terminal antes do comando; o Playwright não carrega automaticamente o `.env` do Vite.
+
+### Imagem publicada e configuração na VPS
+
+Use tags numéricas explícitas. A versão desta entrega é `contatocpa/cpa-frontend-test:1.0.0`, para Linux AMD64. No Compose da VPS, utilize:
+
+```yaml
+services:
+  frontend:
+    image: contatocpa/cpa-frontend-test:1.0.0
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5175}:80"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:?Configure a URL pública da API}
+      VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:?Configure a URL pública do Keycloak}
+      VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-cpa}
+      VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-cpa-frontend}
+      VITE_CPA_CAMPAIGN_UNAVAILABLE_MESSAGE: ${VITE_CPA_CAMPAIGN_UNAVAILABLE_MESSAGE:-}
+```
+
+Preencha o `.env` na mesma pasta desse Compose com as URLs públicas da VPS. A URL do Keycloak não deve incluir `/realms/cpa`. Alinhe também as origens CORS do backend e os redirecionamentos do cliente Keycloak com o domínio do frontend. O `.env` sozinho não injeta valores em uma imagem: mantenha o bloco `environment` acima.
+
+```bash
+docker compose pull frontend
+docker compose up -d --no-build --force-recreate frontend
+```
+
+Para novas releases, publique outra tag, como `1.0.1`, e atualize o Compose. A publicação desta entrega não altera a tag `latest` existente.
 
 ### Variáveis da configuração anterior
 
@@ -79,7 +107,7 @@ Acesse `/admin`. O login usa o Keycloak e exige o papel de realm `cpa-admin`.
 A pesquisa pública não inicializa a autenticação. Os tokens ficam apenas em memória;
 as requisições administrativas renovam o token e enviam `Authorization: Bearer`.
 
-Configure antes de iniciar o Vite ou construir a imagem:
+Configure antes de iniciar o Vite ou criar o contêiner:
 
 ```env
 VITE_KEYCLOAK_URL=http://localhost:8180
@@ -89,7 +117,7 @@ VITE_KEYCLOAK_CLIENT_ID=cpa-frontend
 
 `VITE_KEYCLOAK_URL` é a URL pública acessível pelo navegador, sem `/realms/cpa`.
 Não use o hostname interno do Docker. As variáveis `VITE_` são públicas e não devem
-conter segredos. Reconstrua a imagem após alterar a configuração.
+conter segredos. Recrie o contêiner após alterar a configuração; no Vite local, reinicie o servidor.
 
 No Keycloak, configure um cliente público OpenID Connect `cpa-frontend`, com
 Standard Flow habilitado, PKCE S256 obrigatório e Direct Access Grants desabilitado.

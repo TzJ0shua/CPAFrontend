@@ -10,7 +10,13 @@ describe('integração Keycloak', () => {
     vi.stubEnv('VITE_KEYCLOAK_URL', 'https://login.example'); vi.stubEnv('VITE_KEYCLOAK_REALM', 'cpa'); vi.stubEnv('VITE_KEYCLOAK_CLIENT_ID', 'cpa-frontend')
     window.history.replaceState(null, '', '/admin/cursos')
   })
-  afterEach(() => vi.unstubAllEnvs())
+  afterEach(() => { vi.unstubAllEnvs(); delete window.__CPA_CONFIG__ })
+  it('usa URL, realm e cliente configurados na VPS', async () => {
+    window.__CPA_CONFIG__ = { VITE_KEYCLOAK_URL: 'https://auth.vps.example', VITE_KEYCLOAK_REALM: 'vps', VITE_KEYCLOAK_CLIENT_ID: 'frontend-vps' }
+    const auth = await import('./auth')
+    await auth.initializeAdminAuth()
+    expect(constructor).toHaveBeenCalledWith({ url: 'https://auth.vps.example', realm: 'vps', clientId: 'frontend-vps' })
+  })
   it('inicializa uma única vez com PKCE e retorno para a página solicitada', async () => {
     const auth = await import('./auth')
     await Promise.all([auth.initializeAdminAuth(), auth.initializeAdminAuth()])

@@ -5,9 +5,10 @@ import { Button } from "../components/survey/ui/Button";
 import { LoadingState } from "../components/survey/ui/LoadingState";
 import { fetchCampaignPublicState } from "../services/campaign-state-api";
 import { AppHeader } from "../components/layout/AppHeader";
+import { publicConfig } from "../config/runtime";
 
 const FALLBACK_UNAVAILABLE_MESSAGE =
-  import.meta.env.VITE_CPA_CAMPAIGN_UNAVAILABLE_MESSAGE?.trim() ||
+  publicConfig('VITE_CPA_CAMPAIGN_UNAVAILABLE_MESSAGE') ||
   "A pesquisa está indisponível no momento. Tente novamente mais tarde.";
 
 export function SurveyPage() {
