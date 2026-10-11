@@ -10,14 +10,19 @@ Crie um arquivo `.env` na raiz do projeto. Ele é ignorado pelo Git e não deve 
 # URL pública da API. Sem barra no fim.
 VITE_API_BASE_URL=http://localhost:8080
 
-# Código da campanha consultada no catálogo e no endpoint público
-# /campanhas/{codigo}/disponibilidade.
+# Login administrativo: URL pública do Keycloak, sem /realms/cpa.
+VITE_KEYCLOAK_URL=http://localhost:8180
+VITE_KEYCLOAK_REALM=cpa
+VITE_KEYCLOAK_CLIENT_ID=cpa-frontend
 
 # Mensagem padrão quando a campanha estiver indisponível.
 VITE_CPA_CAMPAIGN_UNAVAILABLE_MESSAGE=A pesquisa está indisponível no momento. Tente novamente mais tarde.
 
 # Porta HTTP do container Nginx ao executar Docker Compose.
 FRONTEND_PORT=5173
+
+# Opcional, somente para testes de navegador.
+PLAYWRIGHT_CHANNEL=msedge
 ```
 
 Para desenvolvimento local, execute `npm run dev`. Para servir a imagem de produção, execute:
@@ -26,7 +31,27 @@ Para desenvolvimento local, execute `npm run dev`. Para servir a imagem de produ
 docker compose up -d --build
 ```
 
-O `VITE_API_BASE_URL` é definido durante o build da imagem; reconstrua o container após alterá-lo.
+### Referência das variáveis
+
+| Variável | Uso | Padrão / observação |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | URL pública da API, acessível pelo navegador, sem barra final. | Compose: `http://localhost:8080`. Sem configuração no Vite: localhost em desenvolvimento e mesma origem em produção. |
+| `VITE_KEYCLOAK_URL` | URL pública do Keycloak, sem o caminho do realm. | Compose: `http://localhost:8180`; obrigatória para entrar no painel. |
+| `VITE_KEYCLOAK_REALM` | Realm usado pelo login administrativo. | Docker: `cpa`; obrigatória no Vite. |
+| `VITE_KEYCLOAK_CLIENT_ID` | Identificador do cliente público OIDC do frontend. | `cpa-frontend`. |
+| `VITE_CPA_CAMPAIGN_UNAVAILABLE_MESSAGE` | Mensagem de indisponibilidade quando a API não fornecer uma mensagem. | `A pesquisa está indisponível no momento. Tente novamente mais tarde.` |
+| `FRONTEND_PORT` | Porta publicada pelo Compose para o Nginx, que escuta na porta interna `80`. | `5173`; não altera a porta do servidor `npm run dev`. |
+| `PLAYWRIGHT_CHANNEL` | Navegador usado por `npm run test:e2e`. | `msedge`; pode ser `chrome` se instalado. É lida pelo processo de testes, não pelo bundle. |
+
+Todas as variáveis `VITE_` são resolvidas ao iniciar o Vite ou construir o bundle; reconstrua a imagem após alterá-las. Defini-las apenas no ambiente do contêiner Nginx já construído não altera o frontend. `import.meta.env.DEV` é uma informação automática do Vite, não uma variável para preencher no `.env`.
+
+O Compose encaminha `VITE_API_BASE_URL`, `VITE_KEYCLOAK_URL`, `VITE_KEYCLOAK_REALM` e `VITE_KEYCLOAK_CLIENT_ID` como argumentos de build. `VITE_CPA_CAMPAIGN_UNAVAILABLE_MESSAGE` não tem argumento de build no Dockerfile atual: configure-a no `.env` ou `.env.production` dentro do contexto de build, que o Vite lê durante `npm run build`. Para testes, exporte `PLAYWRIGHT_CHANNEL` no terminal antes do comando; o Playwright não carrega automaticamente o `.env` do Vite.
+
+### Variáveis da configuração anterior
+
+`VITE_CPA_CAMPAIGN` aparece em configurações antigas, mas não é mais consumida. A pesquisa consulta `/campanhas/atual/disponibilidade` e utiliza a campanha ativa, aberta e dentro do período. Essa variável pode ser removida do `.env`.
+
+As variáveis de banco, CORS, Gmail e administração do servidor Keycloak pertencem ao backend; estão documentadas no README do **CPABackend**. Mantenha `KEYCLOAK_FRONTEND_URL` e as origens CORS alinhadas com a URL pública deste frontend, inclusive quando alterar `FRONTEND_PORT`. As credenciais do Gmail e do banco nunca devem receber o prefixo `VITE_`.
 
 ## Painel administrativo
 
