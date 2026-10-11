@@ -79,13 +79,13 @@ describe('email verification API', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('turns expiry and resend limits into safe, actionable messages', async () => {
+  it('turns unexpected failures and expiry into safe, actionable messages', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 429 })))
     await expect(
       requestEmailVerification('docente@femass.edu.br', 'professor', form),
     ).rejects.toMatchObject({
-      code: 'resend-limit',
-      message: expect.stringContaining('limite de reenvios'),
+      code: 'service-unavailable',
+      message: 'Não foi possível solicitar a verificação no momento.',
     })
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 400 })))

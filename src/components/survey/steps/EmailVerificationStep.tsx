@@ -166,7 +166,7 @@ export function PinVerificationStep({
             Informe o código recebido
           </h2>
           <p className="leading-relaxed text-slate-600">
-            O código expira e tem número limitado de tentativas.
+            O código tem prazo de validade. Ao solicitar um novo código, o anterior deixa de funcionar.
           </p>
         </div>
         <label className="grid gap-2 font-bold">

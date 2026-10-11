@@ -6,7 +6,6 @@ export type EmailVerificationErrorCode =
   | 'invalid-email'
   | 'invalid-master-key'
   | 'invalid-or-expired-pin'
-  | 'resend-limit'
   | 'service-unavailable'
   | 'network'
 
@@ -86,13 +85,6 @@ function requestError(status: number) {
       'Informe um e-mail institucional válido para solicitar o código.',
     )
   }
-  if (status === 429) {
-    return new EmailVerificationError(
-      'resend-limit',
-      status,
-      'Você atingiu o limite de reenvios. Aguarde antes de solicitar outro código.',
-    )
-  }
   if (status === 503) {
     return new EmailVerificationError(
       'service-unavailable',
@@ -112,14 +104,7 @@ function confirmationError(status: number) {
     return new EmailVerificationError(
       'invalid-or-expired-pin',
       status,
-      'O código é inválido, expirou ou atingiu o limite de tentativas. Solicite outro código.',
-    )
-  }
-  if (status === 429) {
-    return new EmailVerificationError(
-      'resend-limit',
-      status,
-      'Você atingiu o limite de tentativas. Aguarde antes de solicitar outro código.',
+      'O código é inválido ou expirou. Confira o código recebido ou solicite outro.',
     )
   }
   if (status === 503) {
