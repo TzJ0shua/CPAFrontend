@@ -31,7 +31,7 @@ import { SubjectStep } from "./steps/SubjectStep";
 
 const emptyResponses = (): Respostas => ({ opcoes: {}, comentario: "" });
 
-export function SurveyForm() {
+export function SurveyForm({ campaign }: { campaign: string }) {
   const [step, setStep] = useState<Step>("participant");
   const [participantType, setParticipantType] =
     useState<ParticipantType | null>(null);
@@ -92,7 +92,7 @@ export function SurveyForm() {
     setLoadingForms(true);
     setFormError("");
     try {
-      const catalog = await fetchCatalog(participantType);
+      const catalog = await fetchCatalog(participantType, campaign);
       setForms(catalog);
       setForm((current) =>
         current
@@ -109,7 +109,7 @@ export function SurveyForm() {
     } finally {
       setLoadingForms(false);
     }
-  }, [participantType]);
+  }, [participantType, campaign]);
   const participantNext = async () => {
     const catalog = await loadForms();
     if (!catalog?.length) return;
@@ -152,7 +152,7 @@ export function SurveyForm() {
     resetAnswersForForm();
     if (form.scope === "DISCIPLINA") {
       try {
-        setCourses(await fetchFormCourses(participantType));
+        setCourses(await fetchFormCourses(participantType, campaign));
         setStep("course");
       } catch (error) {
         setFormError(
@@ -233,7 +233,7 @@ export function SurveyForm() {
     let advancesToNextForm = false;
     let shouldShowConfirmation = true;
     try {
-      const campaignState = await fetchCampaignPublicState();
+      const campaignState = await fetchCampaignPublicState(campaign);
       if (!campaignState.isOpen) {
         setResult({
           ok: false,
@@ -268,7 +268,7 @@ export function SurveyForm() {
         setResult(null);
         if (nextForm.scope === "DISCIPLINA") {
           try {
-            setCourses(await fetchFormCourses(participantType));
+            setCourses(await fetchFormCourses(participantType, campaign));
             setStep("course");
           } catch (error) {
             setFormError(

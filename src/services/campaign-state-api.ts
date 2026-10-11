@@ -1,14 +1,12 @@
 import { buildApiEndpoint } from "../config/api";
 import { fetchWithRetry } from "../utils/fetch-with-retry";
 
-const CAMPAIGN_CODE = import.meta.env.VITE_CPA_CAMPAIGN?.trim() || "cpa-2026";
-const CAMPAIGN_AVAILABILITY_ENDPOINT = buildApiEndpoint(
-  `/campanhas/${encodeURIComponent(CAMPAIGN_CODE)}/disponibilidade`,
-);
 
 interface CampaignStateApiResponse {
-  campanha: string;
-  estado: "RASCUNHO" | "APROVADA" | "ABERTA" | "ENCERRADA";
+  campanha: string | null;
+  estado: CampaignState | null;
+  dataInicio?: string | null;
+  dataFim?: string | null;
   disponivelParaResposta: boolean;
   mensagem?: string | null;
 }
@@ -16,7 +14,10 @@ interface CampaignStateApiResponse {
 export type CampaignState = "RASCUNHO" | "APROVADA" | "ABERTA" | "ENCERRADA";
 
 export interface CampaignPublicState {
-  state: CampaignState;
+  campaign: string | null;
+  state: CampaignState | null;
+  startDate?: string | null;
+  endDate?: string | null;
   isOpen: boolean;
   unavailableMessage?: string;
 }
@@ -31,8 +32,8 @@ async function responseMessage(response: Response) {
   }
 }
 
-export async function fetchCampaignPublicState(): Promise<CampaignPublicState> {
-  const response = await fetchWithRetry(CAMPAIGN_AVAILABILITY_ENDPOINT, {
+export async function fetchCampaignPublicState(campaign?: string): Promise<CampaignPublicState> {
+  const response = await fetchWithRetry(buildApiEndpoint(`/campanhas/${campaign ? encodeURIComponent(campaign) : "atual"}/disponibilidade`), {
     retries: 1,
   });
   if (!response.ok) {
@@ -43,12 +44,15 @@ export async function fetchCampaignPublicState(): Promise<CampaignPublicState> {
   }
 
   const body = (await response.json()) as CampaignStateApiResponse;
-  if (typeof body.disponivelParaResposta !== "boolean") {
+  if (typeof body.disponivelParaResposta !== "boolean" || (body.disponivelParaResposta && (typeof body.campanha !== "string" || !body.campanha))) {
     throw new Error("A resposta de disponibilidade da campanha é inválida.");
   }
 
   return {
+    campaign: body.campanha,
     state: body.estado,
+    startDate: body.dataInicio,
+    endDate: body.dataFim,
     isOpen: body.disponivelParaResposta,
     unavailableMessage: body.mensagem?.trim() || undefined,
   };

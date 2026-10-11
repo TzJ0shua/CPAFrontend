@@ -22,6 +22,7 @@ async function mockServices(page: Page, role = 'cpa-admin', state = 'PUBLICADA')
     } else await route.fulfill({ json: {} })
   })
   const courses = [{ id: 1, nome: 'Engenharia de Produção', ativo: true }, { id: 2, nome: 'Administração', ativo: true }, { id: 3, nome: 'Curso desativado', ativo: false }]
+  const campaigns = [{ id: 1, codigo: 'cpa-2026', nome: 'Avaliação institucional 2026', mensagem: null, estado: 'ABERTA', ativo: true, dataInicio: '2026-10-01', dataFim: '2026-10-31', disponivelParaResposta: true }]
   const version = { id: 1, numero: 1, codigo: 'geral', nome: 'Avaliação institucional', publico: 'aluno', escopo: 'GERAL', ordem: 1, commentAllowed: false, commentNotice: null, estado: state, ativo: true, perguntas: [{ id: 1, codigo: 'q1', texto: 'A instituição oferece uma boa experiência de aprendizagem?', ordem: 1, ativo: true, opcoes: [{ id: 1, code: 'sim', label: 'Concordo totalmente', value: 4, naoSeiResponder: false, ativo: true }] }] }
   await page.route('http://127.0.0.1:8199/**', async route => {
     const request = route.request()
@@ -29,6 +30,15 @@ async function mockServices(page: Page, role = 'cpa-admin', state = 'PUBLICADA')
     const headers = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:5194', 'Access-Control-Allow-Headers': 'authorization,content-type', 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,OPTIONS' }
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
     if (path.startsWith('/admin/')) expect(request.headers().authorization).toMatch(/^Bearer /)
+    if (path === '/admin/campanhas' && request.method() === 'POST') {
+      const item = { ...request.postDataJSON(), id: campaigns.length + 1, estado: 'RASCUNHO', ativo: true, disponivelParaResposta: false }
+      campaigns.push(item)
+      return route.fulfill({ status: 201, json: item, headers })
+    }
+    if (/^\/admin\/campanhas\/[^/]+$/.test(path) && request.method() === 'PUT') {
+      Object.assign(campaigns.find(c => c.codigo === decodeURIComponent(path.split('/')[3]))!, request.postDataJSON())
+      return route.fulfill({ status: 204, headers })
+    }
     if (path.endsWith('/versoes/1') && request.method() === 'PUT') {
       Object.assign(version, request.postDataJSON())
       return route.fulfill({ status: 204, headers })
@@ -48,7 +58,8 @@ async function mockServices(page: Page, role = 'cpa-admin', state = 'PUBLICADA')
     let json: unknown = []
     if (path === '/admin/cursos') json = courses
     else if (path === '/admin/disciplinas') json = [{ id: 1, nome: 'Planejamento e Controle da Produção', professor: 'Maria Silva', cursoId: 1, cursoNome: courses[0].nome, cursoAtivo: true, ativo: true }]
-    else if (path === '/admin/campanhas') json = [{ id: 1, codigo: 'cpa-2026', nome: 'Avaliação institucional 2026', mensagem: null, estado: 'ABERTA', ativo: true }]
+    else if (path === '/admin/campanhas') json = campaigns
+    else if (/^\/admin\/campanhas\/[^/]+$/.test(path)) json = campaigns.find(c => c.codigo === decodeURIComponent(path.split('/')[3]))
     else if (path.endsWith('/versoes/1')) json = version
     else if (path.endsWith('/versoes')) json = [version]
     else if (path.endsWith('/disponibilidade')) json = { campanha: 'cpa-2026', estado: 'ABERTA', disponivelParaResposta: true, mensagem: null }
@@ -92,6 +103,34 @@ test('bloqueia usuário sem perfil administrativo', async ({ page }) => {
   await page.goto('/admin/disciplinas')
   await expect(page.getByRole('heading', { name: 'Acesso negado' })).toBeVisible()
   await expect(page.getByText('Maria Silva')).toHaveCount(0)
+})
+
+test('configura período no cadastro e na edição da campanha', async ({ page }, testInfo) => {
+  await mockServices(page)
+  await page.goto('/admin/campanhas')
+  await expect(page.getByText('01/10/2026 a 31/10/2026')).toBeVisible()
+  await page.getByRole('button', { name: 'Nova campanha' }).click()
+  await page.getByLabel('Código', { exact: true }).fill('outubro')
+  await page.getByLabel('Nome', { exact: true }).fill('Campanha de outubro')
+  await page.getByLabel('Início', { exact: true }).fill('2036-10-01')
+  await page.getByLabel('Fim', { exact: true }).fill('2036-10-31')
+  await page.screenshot({ path: testInfo.outputPath('periodo-campanha.png'), fullPage: true })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click()
+  await expect(page.getByText('01/10/2036 a 31/10/2036')).toBeVisible()
+  await page.getByRole('link', { name: 'Campanha de outubro', exact: true }).click()
+  await page.getByRole('button', { name: 'Editar campanha' }).click()
+  await expect(page.getByLabel('Início', { exact: true })).toHaveValue('2036-10-01')
+  await page.getByLabel('Fim', { exact: true }).fill('2036-11-05')
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click()
+  await expect(page.getByText('01/10/2036 a 05/11/2036')).toBeVisible()
+  await page.goto('/admin/campanhas/cpa-2026')
+  await page.getByRole('button', { name: 'Editar campanha' }).click()
+  await expect(page.getByRole('note')).toContainText('imediatamente')
+  await page.getByLabel('Fim', { exact: true }).fill('2026-11-01')
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click()
+  await expect(page.getByText('01/10/2026 a 01/11/2026')).toBeVisible()
 })
 
 test('exige salvar alterações antes de publicar um rascunho', async ({ page }) => {

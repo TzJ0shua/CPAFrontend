@@ -12,7 +12,6 @@ VITE_API_BASE_URL=http://localhost:8080
 
 # Código da campanha consultada no catálogo e no endpoint público
 # /campanhas/{codigo}/disponibilidade.
-VITE_CPA_CAMPAIGN=cpa-2026
 
 # Mensagem padrão quando a campanha estiver indisponível.
 VITE_CPA_CAMPAIGN_UNAVAILABLE_MESSAGE=A pesquisa está indisponível no momento. Tente novamente mais tarde.
@@ -97,3 +96,7 @@ npm run lint
 - `src/components/survey`: fluxo de avaliação, etapas e componentes de UI.
 - `src/lib`: tipos e dados base da pesquisa.
 - `src/services`: ponto preparado para futura integração REST.
+
+### Período das campanhas
+
+Configure início e fim no painel administrativo. Os dias são inclusivos no fuso `America/Sao_Paulo`; a campanha também deve estar ativa e aberta. Após a migração V14, configure as datas das campanhas existentes: elas ficam indisponíveis até receberem um período. A pesquisa seleciona automaticamente a campanha disponível pela API, sem código fixo no build. Não é permitido abrir campanhas ativas com períodos sobrepostos. A pesquisa revalida a disponibilidade a cada 60 segundos, ao retornar à aba e antes de enviar; o backend valida novamente cada envio.

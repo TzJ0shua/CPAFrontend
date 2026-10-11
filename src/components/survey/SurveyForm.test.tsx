@@ -60,6 +60,7 @@ beforeEach(() => {
     submissionToken: 'opaque-proof',
   })
   vi.mocked(fetchCampaignPublicState).mockResolvedValue({
+    campaign: "cpa-2026",
     state: 'ABERTA',
     isOpen: true,
   })
@@ -84,12 +85,13 @@ function continueFromParticipant(roleName: string) {
 describe('SurveyForm', () => {
   it('revalida a campanha e bloqueia o POST quando ela encerra durante o preenchimento', async () => {
     vi.mocked(fetchCampaignPublicState).mockResolvedValueOnce({
+      campaign: "cpa-2026",
       state: 'ENCERRADA',
       isOpen: false,
       unavailableMessage: 'A campanha está encerrada para respostas.',
     })
 
-    render(<SurveyForm />)
+    render(<SurveyForm campaign="cpa-2026" />)
     continueFromParticipant('Estudante')
     fireEvent.click(await screen.findByRole('button', { name: /^Avaliação discente/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
@@ -113,7 +115,7 @@ describe('SurveyForm', () => {
             })
         }),
     )
-    render(<SurveyForm />)
+    render(<SurveyForm campaign="cpa-2026" />)
 
     continueFromParticipant('Estudante')
     expect(screen.queryByLabelText('CPF')).toBeNull()
@@ -138,7 +140,7 @@ describe('SurveyForm', () => {
   })
 
   it('submits the staff category and opaque proof without e-mail or PIN', async () => {
-    render(<SurveyForm />)
+    render(<SurveyForm campaign="cpa-2026" />)
 
     continueFromParticipant('Docente')
     fireEvent.change(await screen.findByLabelText('E-mail institucional'), {
@@ -178,7 +180,7 @@ describe('SurveyForm', () => {
       proof: { kind: 'qr', value: receipt, codigoDigestFinal: '000000abcf' },
     })
 
-    render(<SurveyForm />)
+    render(<SurveyForm campaign="cpa-2026" />)
     continueFromParticipant('Estudante')
     fireEvent.click(await screen.findByRole('button', { name: /^Avaliação discente/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
@@ -203,7 +205,7 @@ describe('SurveyForm', () => {
   it('starts a new response from cached catalog instead of re-fetching progress state', async () => {
     vi.mocked(fetchCatalog).mockResolvedValueOnce([studentForm])
 
-    render(<SurveyForm />)
+    render(<SurveyForm campaign="cpa-2026" />)
     continueFromParticipant('Estudante')
     fireEvent.click(await screen.findByRole('button', { name: /^Avaliação discente/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
