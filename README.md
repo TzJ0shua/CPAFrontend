@@ -101,7 +101,7 @@ O frontend envia a chave somente para `POST /verificacao-email/chave-mestra` e m
 
 Docentes e funcionários autenticados por PIN podem responder cada versão de formulário uma única vez por email confirmado na campanha. Um novo PIN não libera outra resposta da mesma versão; outra versão ou outro formulário continuam permitidos. A identidade é obtida pelo backend a partir da autorização opaca, e o email não é incluído no POST das respostas. O conflito `FORMULARIO_JA_RESPONDIDO` retorna à seleção para permitir outra escolha, preservando a autorização durante sua validade. O acesso por chave mestra continua como exceção ao limite por email.
 
-O campo **Comentários adicionais** depende da opção **Permitir comentário** de cada versão, que começa desmarcada nos novos rascunhos e está desabilitada em vários formulários iniciais. Abra a versão em rascunho, marque essa opção, preencha o aviso, salve e publique. Versões publicadas exigem clonagem antes de alterar essa configuração. O editor informa se o campo aparecerá na pesquisa; quando habilitado, o comentário é opcional e limitado a 1000 caracteres, tanto na avaliação geral quanto por disciplina.
+O campo **Comentários adicionais** depende da opção **Permitir comentário** de cada versão, que começa desmarcada nos novos rascunhos e está desabilitada em vários formulários iniciais. Abra a versão, marque essa opção e preencha o aviso. Em rascunhos, salve e publique; em versões publicadas, use **Salvar alterações** para aplicar a configuração imediatamente. O editor informa se o campo aparecerá na pesquisa; quando habilitado, o comentário é opcional e limitado a 1000 caracteres, tanto na avaliação geral quanto por disciplina.
 
 Acesse `/admin`. O login usa o Keycloak e exige o papel de realm `cpa-admin`.
 A pesquisa pública não inicializa a autenticação. Os tokens ficam apenas em memória;
@@ -129,12 +129,16 @@ existente no README do backend.
 O painel oferece campanhas, cursos, disciplinas e formulários versionados.
 Na listagem de formulários de uma campanha em rascunho ou aprovada, use **Clonar de outra campanha**. Escolha a campanha, o formulário e a versão de origem, incluindo campanhas encerradas ou inativas, e informe o código e nome da cópia. Será criado um novo formulário ativo, com versão 1 em rascunho e identificadores próprios; a campanha de destino volta ao estado de rascunho. O conteúdo e as respostas da origem permanecem preservados.
 
-No editor do rascunho, **Remover pergunta** retira a pergunta do questionário. Perguntas já salvas são desativadas e podem ser recuperadas em **Mostrar perguntas desativadas**; perguntas novas ainda não salvas são descartadas. Salve o rascunho para efetivar as alterações. Um rascunho pode ficar sem perguntas, mas a publicação exige pelo menos uma pergunta ativa com opções ativas. Versões publicadas permanecem somente para leitura.
+No editor, **Remover pergunta** retira a pergunta do questionário. Perguntas já salvas são desativadas e podem ser recuperadas em **Mostrar perguntas desativadas**; perguntas novas ainda não salvas são descartadas. Salve para efetivar as alterações. Um rascunho pode ficar sem perguntas; a publicação e a edição de uma versão publicada exigem pelo menos uma pergunta ativa e opções ativas em cada pergunta ativa.
+
+Versões publicadas podem ser editadas diretamente, inclusive em campanhas aprovadas, abertas ou encerradas. **Salvar alterações** atualiza nome, público, escopo, ordem, comentários, perguntas e opções na mesma versão, sem exigir clonagem, nova aprovação ou alterar o estado da campanha. O painel solicita confirmação porque respostas anteriores continuam vinculadas a essa versão e passam a referenciar as perguntas e metadados modificados. Identificadores, respostas, notas, rótulos de opções já registrados e vínculos de validação são preservados. A edição não libera uma nova participação de quem já respondeu à versão; outra versão continua permitida.
+
+As demais regras de aprovação permanecem: criar um formulário, clonar a versão mais recente, salvar um rascunho ou publicar uma nova versão faz a campanha voltar a rascunho. Clonar de outra campanha exige destino em rascunho ou aprovado e também retorna o destino a rascunho. Abrir exige campanha ativa e aprovada; aprovar exige rascunho ativo com pelo menos uma versão publicada ativa.
 
 Desativar mantém o registro; um pai inativo oculta seus filhos da pesquisa sem
-alterar a ativação individual deles. Versões publicadas são somente para leitura:
-clone a versão mais recente para editar um novo rascunho. Salve o rascunho antes
-de publicar; alterações de conteúdo retornam a campanha ao estado de rascunho.
+alterar a ativação individual deles. A clonagem da versão mais recente continua
+disponível para criar um novo rascunho. Salve o rascunho antes de publicar;
+alterações em rascunhos retornam a campanha ao estado de rascunho.
 
 Para validar:
 
