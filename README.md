@@ -87,7 +87,11 @@ As variáveis de banco, CORS, Gmail e administração do servidor Keycloak perte
 
 Para alunos, CPF válido e matrícula com 10 dígitos são obrigatórios; zeros à esquerda são preservados. Esses dados permanecem em memória no navegador e são enviados no corpo do POST, sem aparecer em URLs ou no QR Code. O backend armazena somente hashes com `VALIDACAO_ALUNO_HASH_SEED`, configurada exclusivamente no backend.
 
-Cada aluno pode responder uma vez por versão de formulário de cada campanha. Reutilizar o CPF **ou** a matrícula nessa versão retorna `409` com `code: FORMULARIO_JA_RESPONDIDO`; a seleção permite escolher outro formulário ou outra versão. Para avaliações por disciplina, selecione todas as disciplinas desejadas antes do envio: não é possível acrescentar disciplinas depois na mesma versão.
+Cada aluno pode responder uma vez por versão de formulário de cada campanha. Reutilizar o CPF **ou** a matrícula nessa versão retorna `409` com `code: FORMULARIO_JA_RESPONDIDO`. Para avaliações por disciplina, selecione todas as disciplinas desejadas antes do envio: não é possível acrescentar disciplinas depois na mesma versão.
+
+O aluno percorre **todos os formulários e versões publicados ativos do seu público na campanha**, na ordem configurada no painel. A tela inicial da sequência indica concluídos e pendentes e não permite pular para o último formulário. O envio bem-sucedido avança automaticamente; o QR Code aparece somente após concluir todas as pendências. Ao voltar ou recarregar, informe o mesmo CPF e matrícula: o frontend consulta `POST /formulario/aluno/progresso`, retoma o primeiro pendente e não reenvia os concluídos. Se já estiver tudo concluído, recupera o mesmo comprovante final para tirar uma captura de tela. CPF, matrícula e respostas não são salvos no armazenamento do navegador.
+
+Em caso de falha no envio ou na consulta de progresso, o fluxo fica bloqueado e oferece **Verificar progresso**, sem repetir automaticamente o envio. Ao avançar entre etapas, formulários ou disciplinas, a página volta ao topo. O frontend e o backend precisam ser atualizados juntos; o backend aplica a migração V17 para guardar os vínculos do comprovante final.
 
 ## Acesso dos participantes por email ou chave mestra
 
@@ -159,7 +163,7 @@ Os testes de navegador usam um provedor OIDC e uma API simulados, sem acessar os
 cadastros reais. Executam no Microsoft Edge instalado e verificam desktop e celular.
 Para usar outro navegador instalado, defina `PLAYWRIGHT_CHANNEL` (por exemplo, `chrome`).
 
-`e2e/participation-limit.e2e.ts` verifica aluno, professor e funcionário em formulários gerais e por disciplina: após enviar e recarregar a página, uma nova identificação não libera repetição da mesma versão. A interface trata o conflito `409` sem repetir o POST e permite responder outra versão. Os testes também mantêm a exceção da chave mestra para professor e funcionário. A garantia de unicidade é aplicada pelo backend e pelos índices únicos do banco; estes testes de interface usam uma API simulada.
+`e2e/participation-limit.e2e.ts` verifica professor e funcionário em formulários gerais e por disciplina, incluindo a exceção da chave mestra. `e2e/student-journey.e2e.ts` e `e2e/student-identity.e2e.ts` verificam a sequência do aluno, retomada sem repetição, versões, rolagem e QR somente após concluir a campanha. A garantia de unicidade é aplicada pelo backend e pelos índices únicos do banco; estes testes de interface usam uma API simulada.
 
 ## Comprovante com QR Code
 
@@ -169,6 +173,8 @@ digest armazenado pelo backend. Esse identificador corresponde ao exibido pelo
 CPAValidador e pelo histórico. O conteúdo do QR Code continua sendo o código opaco
 original, utilizado para validar a participação. Se a API não retornar o identificador,
 o comprovante continua exibindo o QR Code.
+
+Para alunos, a tela aguarda a conclusão da sequência e usa o comprovante final retornado por `/formulario/aluno/progresso`. Esse QR reúne as participações da campanha; sua leitura e o histórico incluem as avaliações, disciplinas e identificadores das respostas de todos os formulários vinculados.
 
 ## Scripts
 

@@ -27,6 +27,9 @@ test('seleciona campanha automaticamente e bloqueia ao expirar sem mudar de camp
       return route.fulfill({ json: [{ campaign: 'outubro', code: 'geral', name: 'Pesquisa de outubro', audience: 'aluno', version: 1, order: 1,
         scope: 'GERAL', commentAllowed: false, questions: [{ id: 'q1', texto: 'Pergunta', options: [{ code: 'sim', label: 'Sim' }] }] }] })
     }
+    if (url.pathname === '/formulario/aluno/progresso') return route.fulfill({ json: {
+      formularios: [{ code: 'geral', version: 1, respondido: false }], concluida: false, comprovante: null,
+    } })
     return route.fulfill({ json: {} })
   })
   await page.goto('/')

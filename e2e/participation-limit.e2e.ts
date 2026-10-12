@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
-const audiences = ['aluno', 'professor', 'funcionario'] as const
+// Student repetition/resumption is covered by student-journey and student-identity.
+const audiences = ['professor', 'funcionario'] as const
 const scopes = ['GERAL', 'DISCIPLINA'] as const
 const cases = audiences.flatMap(audience => scopes.map(scope => ({ audience, scope, master: false })))
-cases.push(...audiences.filter(audience => audience !== 'aluno').flatMap(audience => scopes.map(scope => ({ audience, scope, master: true }))))
+cases.push(...audiences.flatMap(audience => scopes.map(scope => ({ audience, scope, master: true }))))
 
 for (const { audience, scope, master } of cases) test(`${audience}/${scope}: ${master ? 'chave mestra mantém exceção' : 'recarregar não libera repetição e outra versão é permitida'}`, async ({ page }) => {
   const requests: Record<string, unknown>[] = []
@@ -49,7 +50,7 @@ for (const { audience, scope, master } of cases) test(`${audience}/${scope}: ${m
       const body = request.postDataJSON()
       requests.push(body)
       expect(body).toMatchObject({ campaign: 'outubro', form: 'avaliacao', respondent: { type: audience } })
-      const identity = audience === 'aluno' ? body.respondent.cpf : identities.get(body.respondent.emailVerificationToken)
+      const identity = identities.get(body.respondent.emailVerificationToken)
       if (!master) expect(identity).toBeTruthy()
       const key = `${body.campaign}:${body.form}:${body.formVersion}:${identity}`
       if (!master && answered.has(key)) return route.fulfill({ status: 409, json: { code: 'FORMULARIO_JA_RESPONDIDO', message: 'Já respondido' } })
@@ -61,15 +62,10 @@ for (const { audience, scope, master } of cases) test(`${audience}/${scope}: ${m
   })
 
   const identify = async (page: Page) => {
-    await page.getByRole('button', { name: audience === 'aluno' ? /^Estudante/ : audience === 'professor' ? /^Docente/ : /^Funcionário/ }).click()
-    if (audience === 'aluno') {
-      await page.getByLabel('CPF').fill('52998224725')
-      await page.getByLabel('Matrícula', { exact: true }).fill('0001234567')
-    }
+    await page.getByRole('button', { name: audience === 'professor' ? /^Docente/ : /^Funcionário/ }).click()
     await page.getByRole('checkbox').check()
     await page.getByRole('button', { name: 'Continuar', exact: true }).click()
-    if (audience !== 'aluno') {
-      if (master) {
+    if (master) {
         await page.getByLabel('Chave mestra').fill('chave-dos-testes')
         await page.getByRole('button', { name: 'Acessar com chave mestra' }).click()
       } else {
@@ -77,7 +73,6 @@ for (const { audience, scope, master } of cases) test(`${audience}/${scope}: ${m
         await page.getByRole('button', { name: 'Enviar código' }).click()
         await page.getByLabel('Código', { exact: true }).fill('PIN-TESTE')
         await page.getByRole('button', { name: 'Confirmar código' }).click()
-      }
     }
     await expect(page.getByRole('heading', { name: 'Selecione a avaliação' })).toBeVisible()
   }
@@ -118,5 +113,5 @@ for (const { audience, scope, master } of cases) test(`${audience}/${scope}: ${m
     expect(saved[1]).toMatchObject({ formVersion: 2 })
     expect(requests).toHaveLength(3)
   }
-  if (audience !== 'aluno') expect(authorizations).toBe(2)
+  expect(authorizations).toBe(2)
 })

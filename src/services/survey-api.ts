@@ -31,6 +31,31 @@ export interface SubmitSurveyResult {
   proof?: SubmitSurveyProof
 }
 
+export interface StudentProgress {
+  formularios: { code: string; version: number; respondido: boolean }[]
+  concluida: boolean
+  proof?: SubmitSurveyProof
+}
+
+export async function fetchStudentProgress(campaign: string, cpf: string, matricula: string, acceptedTerms: boolean): Promise<StudentProgress> {
+  const response = await fetchWithRetry(buildApiEndpoint('/formulario/aluno/progresso'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, retries: 1,
+    body: JSON.stringify({ campaign, cpf: cpf.replace(/\D/g, ''), matricula, aceiteTermosCondicoesServico: acceptedTerms }),
+  })
+  if (!response.ok) throw new Error('Não foi possível consultar seu progresso. Confira CPF e matrícula e tente novamente.')
+  const body = await response.json() as {
+    formularios: StudentProgress['formularios']; concluida: boolean; comprovante?: ApiSubmitResponse
+  }
+  if (!Array.isArray(body.formularios) || typeof body.concluida !== 'boolean'
+      || body.formularios.some(item => typeof item.code !== 'string' || !Number.isInteger(item.version) || typeof item.respondido !== 'boolean')) {
+    throw new Error('Não foi possível consultar seu progresso.')
+  }
+  const proof = body.concluida ? normalizedProof(body.comprovante ?? null) : undefined
+  if (body.concluida && (!proof || body.formularios.length === 0 || body.formularios.some(item => !item.respondido)))
+    throw new Error('Não foi possível recuperar o comprovante da campanha.')
+  return { formularios: body.formularios, concluida: body.concluida, proof }
+}
+
 async function readJsonOrText(response: Response) {
   const responseText = await response.text()
   if (!responseText) return null

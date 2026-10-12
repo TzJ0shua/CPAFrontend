@@ -15,6 +15,7 @@ interface Props {
   onNext: () => void;
   error?: string;
   onRetry?: () => void;
+  busy?: boolean;
 }
 
 const options: Array<{
@@ -48,7 +49,7 @@ export function ParticipantStep(props: Props) {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setTouched(true);
-    if (valid) props.onNext();
+    if (valid && !props.busy) props.onNext();
   };
   return (
     <section className="survey-enter w-full max-w-2xl px-4 sm:px-6">
@@ -67,7 +68,7 @@ export function ParticipantStep(props: Props) {
         className="space-y-7 rounded-xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-900/10 sm:p-8"
         onSubmit={submit}
       >
-        <fieldset className="grid gap-4">
+        <fieldset className="grid gap-4" disabled={props.busy}>
           <legend className="text-sm font-bold text-slate-700">
             Tipo de participante
           </legend>
@@ -89,14 +90,14 @@ export function ParticipantStep(props: Props) {
         {student ? <div className="space-y-4">
           <p className="text-sm text-slate-600">CPF e matrícula serão transformados em hashes no servidor para impedir respostas repetidas à mesma versão. Os valores originais não serão armazenados.</p>
           <label className="grid gap-2 font-bold">CPF
-            <input type="text" inputMode="numeric" autoComplete="off" required maxLength={14} placeholder="000.000.000-00"
+            <input type="text" inputMode="numeric" autoComplete="off" required maxLength={14} placeholder="000.000.000-00" readOnly={props.busy}
               className="h-12 rounded-lg border border-slate-300 px-4 font-normal" value={props.cpf}
               onChange={e => props.onCpfChange(formatCpf(e.target.value))}
               aria-invalid={touched && cpfError} aria-describedby={touched && cpfError ? "cpf-error" : undefined} />
           </label>
           {touched && cpfError ? <p id="cpf-error" role="alert" className="text-sm text-red-600">Informe um CPF válido.</p> : null}
           <label className="grid gap-2 font-bold">Matrícula
-            <input type="text" inputMode="numeric" autoComplete="off" required maxLength={10}
+            <input type="text" inputMode="numeric" autoComplete="off" required maxLength={10} readOnly={props.busy}
               className="h-12 rounded-lg border border-slate-300 px-4 font-normal" value={props.matricula}
               onChange={e => props.onMatriculaChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
               aria-invalid={touched && matriculaError} aria-describedby={touched && matriculaError ? "matricula-error" : undefined} />
@@ -108,6 +109,7 @@ export function ParticipantStep(props: Props) {
             className="mt-1 shrink-0"
             type="checkbox"
             checked={props.acceptedTerms}
+            disabled={props.busy}
             onChange={(e) => props.onAcceptedTermsChange(e.target.checked)}
           />
           Li e aceito os termos de uso e a política de privacidade.
@@ -127,8 +129,8 @@ export function ParticipantStep(props: Props) {
             ) : null}
           </div>
         ) : null}
-        <Button className="w-full" type="submit">
-          Continuar
+        <Button className="w-full" type="submit" disabled={props.busy}>
+          {props.busy ? "Carregando..." : "Continuar"}
         </Button>
       </form>
     </section>

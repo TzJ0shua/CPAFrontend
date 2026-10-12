@@ -10,7 +10,7 @@ import {
   EmailVerificationError,
 } from '../../services/email-verification-api'
 import { fetchCampaignPublicState } from '../../services/campaign-state-api'
-import { submitSurvey } from '../../services/survey-api'
+import { submitSurvey, fetchStudentProgress } from '../../services/survey-api'
 import { SurveyForm } from './SurveyForm'
 
 vi.mock('../../services/catalog-api', () => ({
@@ -25,7 +25,7 @@ vi.mock('../../services/email-verification-api', async importOriginal => ({
   authorizeMasterKey: vi.fn(),
 }))
 vi.mock('../../services/campaign-state-api', () => ({ fetchCampaignPublicState: vi.fn() }))
-vi.mock('../../services/survey-api', () => ({ submitSurvey: vi.fn() }))
+vi.mock('../../services/survey-api', () => ({ submitSurvey: vi.fn(), fetchStudentProgress: vi.fn() }))
 
 const baseForm: Omit<CatalogForm, 'audience' | 'code' | 'name'> = {
   campaign: 'cpa-2026',
@@ -57,6 +57,19 @@ const staffForm: CatalogForm = {
 }
 
 beforeEach(() => {
+  vi.mocked(fetchStudentProgress).mockImplementation(async () => {
+    const catalog = await vi.mocked(fetchCatalog).mock.results.at(-1)?.value as CatalogForm[] ?? [studentForm]
+    const completed = new Set<string>()
+    let proof
+    for (let i = 0; i < vi.mocked(submitSurvey).mock.calls.length; i++) {
+      const payload = vi.mocked(submitSurvey).mock.calls[i][0]
+      const result = await vi.mocked(submitSurvey).mock.results[i].value
+      if (result.ok || result.code === 'FORMULARIO_JA_RESPONDIDO') completed.add(`${payload.form}:${payload.formVersion}`)
+      if (result.proof) proof = result.proof
+    }
+    const formularios = catalog.map(f => ({ code: f.code, version: f.version, respondido: completed.has(`${f.code}:${f.version}`) }))
+    return { formularios, concluida: formularios.every(f => f.respondido), proof: proof ?? { kind: 'qr', value: 'campaign-receipt', codigoDigestFinal: '012345abcd' } }
+  })
   vi.mocked(fetchAccessConfiguration).mockResolvedValue({ emailDisponivel: true, chaveMestraDisponivel: true })
   vi.mocked(authorizeMasterKey).mockResolvedValue({ submissionToken: 'master-proof' })
   vi.mocked(fetchCatalog).mockImplementation(async (participantType) =>
@@ -103,6 +116,62 @@ async function chooseStaffForm(name = 'Avaliação docente') {
 }
 
 describe('SurveyForm', () => {
+  it('impede escolher o último formulário, mantém a ordem e exibe somente o comprovante da campanha', async () => {
+    const second = { ...studentForm, code: 'segundo', name: 'Segunda avaliação', order: 2 }
+    vi.mocked(fetchCatalog).mockResolvedValue([studentForm, second])
+    vi.mocked(submitSurvey).mockResolvedValue({ ok: true, status: 200, message: 'Salvo', proof: { kind: 'qr', value: 'proof-do-formulario' } })
+    const progress = [
+      { formularios: [studentForm, second].map(f => ({ code: f.code, version: f.version, respondido: false })), concluida: false },
+      { formularios: [{ code: studentForm.code, version: 1, respondido: true }, { code: second.code, version: 1, respondido: false }], concluida: false },
+      { formularios: [studentForm, second].map(f => ({ code: f.code, version: f.version, respondido: true })), concluida: true, proof: { kind: 'qr' as const, value: 'proof-da-campanha', codigoDigestFinal: '012345abcd' } },
+    ]
+    vi.mocked(fetchStudentProgress).mockReset()
+    for (const item of progress) vi.mocked(fetchStudentProgress).mockResolvedValueOnce(item)
+    render(<SurveyForm campaign="cpa-2026" />)
+    continueFromParticipant('Estudante')
+    await screen.findByRole('heading', { name: 'Sua sequência de avaliações' })
+    expect((screen.getByRole('button', { name: /^Segunda avaliação/ }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima etapa' }))
+    await screen.findByRole('heading', { name: 'Segunda avaliação' })
+    expect(screen.queryByRole('img', { name: 'QR Code de confirmação da participação' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Sim' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
+    await screen.findByRole('heading', { name: 'Avaliação enviada' })
+    expect(screen.getByText('012345abcd')).not.toBeNull()
+    expect(vi.mocked(submitSurvey).mock.calls.map(([payload]) => payload.form)).toEqual([studentForm.code, second.code])
+    expect(vi.mocked(window.scrollTo)).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' })
+  })
+  it('retoma apenas o formulário pendente depois de recarregar sem reenviar os concluídos', async () => {
+    const second = { ...studentForm, code: 'segundo', name: 'Segunda avaliação', order: 2 }
+    vi.mocked(fetchCatalog).mockResolvedValue([studentForm, second])
+    vi.mocked(fetchStudentProgress).mockResolvedValue({ formularios: [{ code: studentForm.code, version: 1, respondido: true }, { code: second.code, version: 1, respondido: false }], concluida: false })
+    render(<SurveyForm campaign="cpa-2026" />)
+    continueFromParticipant('Estudante')
+    await screen.findByRole('heading', { name: 'Sua sequência de avaliações' })
+    expect(screen.getByText('Concluído')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    await screen.findByRole('heading', { name: 'Segunda avaliação' })
+    expect(submitSurvey).not.toHaveBeenCalled()
+  })
+  it('falha ao consultar progresso após envio não libera QR nem repete POST; recuperação prossegue', async () => {
+    const query = vi.mocked(fetchStudentProgress).getMockImplementation()!
+    vi.mocked(fetchStudentProgress).mockReset().mockImplementationOnce(query).mockRejectedValueOnce(new Error('Sem conexão')).mockImplementation(query)
+    render(<SurveyForm campaign="cpa-2026" />)
+    continueFromParticipant('Estudante')
+    await screen.findByRole('heading', { name: 'Sua sequência de avaliações' })
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
+    await screen.findByText('Sem conexão')
+    expect(submitSurvey).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('img', { name: 'QR Code de confirmação da participação' })).toBeNull()
+    expect((screen.getByRole('button', { name: 'Finalizar Pesquisa' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar progresso' }))
+    await screen.findByRole('heading', { name: 'Avaliação enviada' })
+    expect(submitSurvey).toHaveBeenCalledTimes(1)
+  })
   it('exige identificação válida somente para aluno e limpa ao mudar público', async () => {
     render(<SurveyForm campaign="cpa-2026" />)
     fireEvent.click(screen.getByRole('button', { name: /^Estudante/ }))
@@ -119,7 +188,7 @@ describe('SurveyForm', () => {
     expect((screen.getByLabelText('CPF') as HTMLInputElement).value).toBe('')
   })
 
-  it('trata repetição por versão e permite escolher versão diferente mantendo identificação', async () => {
+  it('retoma a sequência após conflito e não mostra QR antes de concluir todas as versões', async () => {
     vi.mocked(fetchCatalog).mockResolvedValue([studentForm, { ...studentForm, version: 2, name: 'Nova versão' }])
     vi.mocked(submitSurvey).mockResolvedValueOnce({ ok: false, status: 409, code: 'FORMULARIO_JA_RESPONDIDO', message: 'Duplicado' })
     render(<SurveyForm campaign="cpa-2026" />)
@@ -127,10 +196,9 @@ describe('SurveyForm', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Avaliação discente/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
-    await screen.findByText('Você já respondeu esta versão do formulário nesta campanha. Escolha outro formulário ou uma nova versão publicada.')
-    fireEvent.click(screen.getByRole('button', { name: /^Nova versão/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima etapa' }))
+    await screen.findByRole('heading', { name: 'Nova versão' })
+    expect(screen.queryByRole('img', { name: 'QR Code de confirmação da participação' })).toBeNull()
     fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
     await waitFor(() => expect(submitSurvey).toHaveBeenCalledTimes(2))
@@ -351,7 +419,7 @@ describe('SurveyForm', () => {
     consoleError.mockRestore()
   })
 
-  it('starts a new response from cached catalog instead of re-fetching progress state', async () => {
+  it('volta à identificação do aluno para consultar o progresso ao iniciar novamente', async () => {
     vi.mocked(fetchCatalog).mockResolvedValueOnce([studentForm])
 
     render(<SurveyForm campaign="cpa-2026" />)
@@ -364,7 +432,11 @@ describe('SurveyForm', () => {
     await screen.findByRole('heading', { name: 'Avaliação enviada' })
     fireEvent.click(screen.getByRole('button', { name: 'Nova resposta' }))
 
-    expect(await screen.findByRole('button', { name: /^Avaliação discente/ })).not.toBeNull()
-    expect(vi.mocked(fetchCatalog)).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: /^Estudante/ }))
+    expect((screen.getByLabelText('CPF') as HTMLInputElement).value).toBe('')
+    continueFromParticipant('Estudante')
+    await screen.findByRole('heading', { name: 'Avaliação enviada' })
+    expect(vi.mocked(submitSurvey)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(fetchStudentProgress)).toHaveBeenCalledTimes(3)
   })
 })
