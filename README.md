@@ -91,6 +91,8 @@ Cada aluno pode responder uma vez por versão de formulário de cada campanha. R
 
 ## Acesso dos participantes por email ou chave mestra
 
+Para docentes e funcionários, a sequência é **perfil → verificação por email/PIN ou chave mestra → escolha do formulário → preenchimento**. A escolha é exibida mesmo quando há apenas um formulário disponível, sem selecionar automaticamente uma avaliação. O botão **Voltar** do questionário geral ou da escolha de curso retorna à seleção com todos os formulários disponíveis, preservando a autorização de acesso. Cursos são carregados somente após a escolha de um formulário por disciplina.
+
 Ao entrar como docente ou funcionário, a pesquisa consulta `GET /verificacao-email/configuracao`. Com serviço de email configurado, é possível usar o PIN enviado ao email institucional ou a chave mestra. Sem configuração, o campo de email fica somente para leitura, com o aviso **Serviço de email indisponível** e orientação para inserir a chave mestra. Uma falha no envio também permite recorrer à chave.
 
 A chave é definida como `VERIFICACAO_EMAIL_CHAVE_MESTRA` no `.env` do **backend**, e encaminhada pelo Compose. Não adicione a chave ao `.env` deste frontend nem use `VITE_`: ela é secreta. Veja as instruções no README do CPABackend. Vazia por padrão, desabilita esse método; após configurar, recrie o backend.

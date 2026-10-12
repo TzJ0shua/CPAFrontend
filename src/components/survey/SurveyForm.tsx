@@ -150,9 +150,9 @@ export function SurveyForm({ campaign }: { campaign: string }) {
     }
     setParticipantType(value);
   };
-  const startForm = async (verified = false) => {
+  const startForm = async () => {
     if (!form || !participantType) return;
-    if (participantType !== "aluno" && !emailVerificationToken && !verified) {
+    if (participantType !== "aluno" && !emailVerificationToken) {
       setStep("email");
       return;
     }
@@ -246,8 +246,13 @@ export function SurveyForm({ campaign }: { campaign: string }) {
       setVerificationLoading(false);
     }
   };
-  const startAfterVerification = async () => {
-    await startForm(true);
+  const startAfterVerification = () => {
+    // Access authorization belongs to the audience and campaign. The form sent
+    // to the access API is only its initial context, not the participant's choice.
+    resetAnswersForForm();
+    setForm(null);
+    setFormError("");
+    setStep("form");
   };
   const restartEmailVerification = () => {
     clearVerification();
@@ -402,7 +407,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
       ) : null}
       {step === "form" ? (
         <FormSelectionStep
-          forms={isStaffJourney && form ? [form] : forms}
+          forms={forms}
           selected={form}
           loading={loadingForms}
           error={formError}
@@ -443,9 +448,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
           isLoading={false}
           error=""
           onRetry={() => undefined}
-          onBack={() =>
-            isStaffJourney ? restartEmailVerification() : setStep("form")
-          }
+          onBack={() => setStep("form")}
           onNext={() => setStep("subjects")}
         />
       ) : null}
@@ -486,9 +489,7 @@ export function SurveyForm({ campaign }: { campaign: string }) {
               ? subjectIndex
                 ? setSubjectIndex(subjectIndex - 1)
                 : setStep("subjects")
-              : participantType === "aluno"
-                ? setStep("form")
-                : restartEmailVerification()
+              : setStep("form")
           }
           onNext={() => {
             if (

@@ -9,8 +9,12 @@ for (const emailAvailable of [true, false]) {
       if (path.endsWith('/disponibilidade')) return route.fulfill({ json: {
         campanha: 'outubro', estado: 'ABERTA', disponivelParaResposta: true, dataInicio: '2026-10-01', dataFim: '2026-10-31', mensagem: null,
       } })
-      if (path === '/formularios') return route.fulfill({ json: [{ campaign: 'outubro', code: 'docente', name: 'Avaliação docente', audience: 'professor', version: 1,
-        scope: 'GERAL', order: 1, commentAllowed: false, questions: [{ id: 'q1', texto: 'A estrutura é adequada?', options: [{ code: 'sim', label: 'Sim' }] }] }] })
+      if (path === '/formularios') return route.fulfill({ json: [
+        { campaign: 'outubro', code: 'docente', name: 'Avaliação docente', audience: 'professor', version: 1,
+          scope: 'DISCIPLINA', order: 1, commentAllowed: false, questions: [{ id: 'q1', texto: 'Avalie sua disciplina', options: [{ code: 'sim', label: 'Sim' }] }] },
+        { campaign: 'outubro', code: 'instituicao', name: 'Avaliação institucional', audience: 'professor', version: 1,
+          scope: 'GERAL', order: 2, commentAllowed: false, questions: [{ id: 'q1', texto: 'A estrutura é adequada?', options: [{ code: 'sim', label: 'Sim' }] }] },
+      ] })
       if (path === '/verificacao-email/configuracao') return route.fulfill({ json: { emailDisponivel: emailAvailable, chaveMestraDisponivel: true } })
       if (path === '/verificacao-email/chave-mestra') {
         keyRequests++
@@ -46,10 +50,21 @@ for (const emailAvailable of [true, false]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await page.getByLabel('Chave mestra').fill('segredo-teste')
     await page.getByRole('button', { name: 'Acessar com chave mestra' }).click()
+    await expect(page.getByRole('heading', { name: 'Selecione a avaliação' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Continuar', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /^Avaliação docente/ })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('escolha-apos-chave.png'), fullPage: true, animations: 'disabled' })
+    await page.getByRole('button', { name: /^Avaliação institucional/ }).click()
+    await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Avaliação institucional' })).toBeVisible()
+    await page.getByRole('button', { name: 'Voltar', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Selecione a avaliação' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Avaliação docente/ })).toBeVisible()
+    await page.getByRole('button', { name: 'Continuar', exact: true }).click()
     await page.getByRole('button', { name: 'Sim', exact: true }).click()
     await page.getByRole('button', { name: 'Finalizar Pesquisa' }).click()
     await expect(page.getByRole('heading', { name: 'Avaliação enviada' })).toBeVisible()
-    expect(submitted).toMatchObject({ campaign: 'outubro', respondent: { type: 'professor', emailVerificationToken: 'opaque-master-proof' } })
+    expect(submitted).toMatchObject({ campaign: 'outubro', form: 'instituicao', respondent: { type: 'professor', emailVerificationToken: 'opaque-master-proof' } })
     expect(JSON.stringify(submitted)).not.toContain('segredo-teste')
     expect(keyRequests).toBe(2)
     expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))).not.toContain('segredo-teste')

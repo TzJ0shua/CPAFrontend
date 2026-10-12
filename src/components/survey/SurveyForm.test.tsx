@@ -94,6 +94,14 @@ function continueFromParticipant(roleName: string) {
   fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
 }
 
+async function chooseStaffForm(name = 'Avaliação docente') {
+  await screen.findByRole('heading', { name: 'Selecione a avaliação' })
+  expect(screen.queryByRole('button', { name: 'Sim' })).toBeNull()
+  expect((screen.getByRole('button', { name: 'Continuar' }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+}
+
 describe('SurveyForm', () => {
   it('exige identificação válida somente para aluno e limpa ao mudar público', async () => {
     render(<SurveyForm campaign="cpa-2026" />)
@@ -199,6 +207,7 @@ describe('SurveyForm', () => {
       target: { value: 'PIN-SECRETO' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar código' }))
+    await chooseStaffForm()
     fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
 
@@ -225,6 +234,7 @@ describe('SurveyForm', () => {
     await screen.findByText('Serviço de email indisponível')
     fireEvent.change(screen.getByLabelText('Chave mestra'), { target: { value: 'chave-secreta-teste' } })
     fireEvent.click(screen.getByRole('button', { name: 'Acessar com chave mestra' }))
+    await chooseStaffForm()
     fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
     await waitFor(() => expect(submitSurvey).toHaveBeenCalledTimes(1))
@@ -247,6 +257,7 @@ describe('SurveyForm', () => {
     expect((screen.getByLabelText('E-mail institucional') as HTMLInputElement).readOnly).toBe(true)
     fireEvent.change(screen.getByLabelText('Chave mestra'), { target: { value: 'segredo' } })
     fireEvent.click(screen.getByRole('button', { name: 'Acessar com chave mestra' }))
+    await chooseStaffForm()
     await screen.findByRole('button', { name: 'Sim' })
     expect(confirmEmailVerification).not.toHaveBeenCalled()
   })
@@ -259,8 +270,51 @@ describe('SurveyForm', () => {
     fireEvent.change(screen.getByLabelText('Chave mestra'), { target: { value: 'errada' } })
     fireEvent.click(screen.getByRole('button', { name: 'Acessar com chave mestra' }))
     await screen.findByText('Chave mestra inválida.')
+    expect(screen.queryByRole('heading', { name: 'Selecione a avaliação' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Sim' })).toBeNull()
     expect(submitSurvey).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['professor', 'email'], ['professor', 'chave'],
+    ['funcionario', 'email'], ['funcionario', 'chave'],
+  ] as const)('%s escolhe qualquer formulário após verificar %s e pode voltar sem autenticar novamente', async (publico, access) => {
+    const first = { ...staffForm, audience: publico, scope: 'DISCIPLINA' as const }
+    const second = { ...staffForm, audience: publico, code: 'instituicao', name: 'Avaliação institucional', version: 2,
+      questions: [{ ...staffForm.questions[0], texto: 'Pergunta do formulário escolhido' }] }
+    vi.mocked(fetchCatalog).mockResolvedValue([first, second])
+    render(<SurveyForm campaign="cpa-2026" />)
+    continueFromParticipant(publico === 'professor' ? 'Docente' : 'Funcionário')
+    await screen.findByText('Enviaremos um código para confirmar o acesso. Não informaremos se o endereço existe.')
+    expect(screen.queryByRole('heading', { name: 'Selecione a avaliação' })).toBeNull()
+    if (access === 'email') {
+      fireEvent.change(screen.getByLabelText('E-mail institucional'), { target: { value: 'docente@femass.edu.br' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }))
+      fireEvent.change(await screen.findByLabelText('Código'), { target: { value: 'PIN-TESTE' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar código' }))
+    } else {
+      fireEvent.change(screen.getByLabelText('Chave mestra'), { target: { value: 'segredo' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Acessar com chave mestra' }))
+    }
+    await chooseStaffForm('Avaliação institucional')
+    await screen.findByText('Pergunta do formulário escolhido')
+    expect(fetchFormCourses).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    expect(screen.getByRole('button', { name: /^Avaliação docente/ })).not.toBeNull()
+    expect(screen.getByRole('button', { name: /^Avaliação institucional/ })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Avaliação docente/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    await screen.findByRole('heading', { name: 'Selecione seu Curso' })
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    expect(screen.getByRole('heading', { name: 'Selecione a avaliação' })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Avaliação institucional/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sim' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pesquisa' }))
+    await waitFor(() => expect(submitSurvey).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(submitSurvey).mock.calls[0][0]).toMatchObject({ form: 'instituicao', formVersion: 2,
+      respondent: { type: publico, emailVerificationToken: access === 'email' ? 'opaque-proof' : 'master-proof' } })
+    expect(access === 'email' ? confirmEmailVerification : authorizeMasterKey).toHaveBeenCalledTimes(1)
   })
 
   it('shows only one opaque proof representation and keeps it out of URL/logs', async () => {
