@@ -159,6 +159,8 @@ Os testes de navegador usam um provedor OIDC e uma API simulados, sem acessar os
 cadastros reais. Executam no Microsoft Edge instalado e verificam desktop e celular.
 Para usar outro navegador instalado, defina `PLAYWRIGHT_CHANNEL` (por exemplo, `chrome`).
 
+`e2e/participation-limit.e2e.ts` verifica aluno, professor e funcionário em formulários gerais e por disciplina: após enviar e recarregar a página, uma nova identificação não libera repetição da mesma versão. A interface trata o conflito `409` sem repetir o POST e permite responder outra versão. Os testes também mantêm a exceção da chave mestra para professor e funcionário. A garantia de unicidade é aplicada pelo backend e pelos índices únicos do banco; estes testes de interface usam uma API simulada.
+
 ## Comprovante com QR Code
 
 Após enviar a avaliação, a tela do comprovante exibe o QR Code e o identificador
