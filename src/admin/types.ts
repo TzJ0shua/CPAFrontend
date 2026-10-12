@@ -1,4 +1,5 @@
 export interface Campaign { id: number; codigo: string; nome: string; mensagem: string | null; estado: string; ativo: boolean; dataInicio: string | null; dataFim: string | null; disponivelParaResposta: boolean }
+export interface CampaignDeletionPreview { id: number; codigo: string; nome: string; formularios: number; versoes: number; perguntas: number; opcoes: number; avaliacoes: number; respostas: number; validacoes: number; autorizacoes: number }
 export interface Course { id: number; nome: string; ativo: boolean }
 export interface Subject { id: number; nome: string; professor: string; cursoId: number; cursoNome: string; ativo: boolean; cursoAtivo: boolean }
 export interface AdminForm { id: number; codigo: string; nome: string; publico: string; ativo: boolean }

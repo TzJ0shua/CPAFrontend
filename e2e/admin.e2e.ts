@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
-async function mockServices(page: Page, role = 'cpa-admin', state = 'PUBLICADA') {
+async function mockServices(page: Page, role = 'cpa-admin', state = 'PUBLICADA', responses = 0) {
   let nonce = ''
   await page.route('http://127.0.0.1:8189/**', async route => {
     const url = new URL(route.request().url())
@@ -27,9 +27,16 @@ async function mockServices(page: Page, role = 'cpa-admin', state = 'PUBLICADA')
   await page.route('http://127.0.0.1:8199/**', async route => {
     const request = route.request()
     const path = new URL(request.url()).pathname
-    const headers = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:5194', 'Access-Control-Allow-Headers': 'authorization,content-type', 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,OPTIONS' }
+    const headers = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:5194', 'Access-Control-Allow-Headers': 'authorization,content-type', 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS' }
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
     if (path.startsWith('/admin/')) expect(request.headers().authorization).toMatch(/^Bearer /)
+    const deletion = { id: 1, codigo: 'cpa-2026', nome: campaigns[0]?.nome, formularios: 1, versoes: 1, perguntas: 1, opcoes: 1, avaliacoes: responses, respostas: responses, validacoes: responses, autorizacoes: 0 }
+    if (path === '/admin/campanhas/cpa-2026/exclusao') return route.fulfill({ json: deletion, headers })
+    if (path === '/admin/campanhas/cpa-2026' && request.method() === 'DELETE') {
+      expect(request.postDataJSON()).toEqual(deletion)
+      campaigns.splice(0, 1)
+      return route.fulfill({ status: 204, headers })
+    }
     if (path === '/admin/campanhas' && request.method() === 'POST') {
       const item = { ...request.postDataJSON(), id: campaigns.length + 1, estado: 'RASCUNHO', ativo: true, disponivelParaResposta: false }
       campaigns.push(item)
@@ -98,6 +105,31 @@ test('login PKCE, acesso direto, recarregamento, cadastros, desativação e nave
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole('button', { name: 'Sair', exact: true }).click()
   await expect(page).toHaveURL('http://127.0.0.1:5194/')
+})
+
+for (const responses of [0, 3]) test(`exclui campanha com ${responses} respostas após diálogo e permite cancelar`, async ({ page }, testInfo) => {
+  const { campaigns } = await mockServices(page, 'cpa-admin', 'PUBLICADA', responses)
+  await page.goto(responses ? '/admin/campanhas/cpa-2026' : '/admin/campanhas')
+  const button = page.getByRole('button', { name: 'Excluir campanha', exact: true })
+  await expect(button).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('excluir-campanha.png'), fullPage: true })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  page.once('dialog', async dialog => {
+    expect(dialog.type()).toBe('confirm')
+    expect(dialog.message()).toContain(responses ? 'Há 3 resposta(s)' : 'Não há respostas atreladas')
+    expect(dialog.message()).toContain('apagados definitivamente')
+    expect(dialog.message()).toContain('QR Codes')
+    expect(dialog.message()).toContain('não pode ser desfeita')
+    await dialog.dismiss()
+  })
+  await button.click()
+  await expect(button).toBeEnabled()
+  expect(campaigns).toHaveLength(1)
+  page.once('dialog', dialog => dialog.accept())
+  await button.click()
+  await expect(page).toHaveURL(/\/admin\/campanhas$/)
+  await expect(page.getByText('Nenhuma campanha encontrada.')).toBeVisible()
+  expect(campaigns).toHaveLength(0)
 })
 
 test('bloqueia usuário sem perfil administrativo', async ({ page }) => {

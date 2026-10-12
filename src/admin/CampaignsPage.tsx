@@ -3,7 +3,8 @@ import type { FormEvent } from 'react'
 import { adminApi, segment } from './api'
 import type { Campaign } from './types'
 import { AdminLink, Filters, Notice, StatusBadge } from './ui'
-import { matches, useAction, useAdminData } from './hooks'
+import { matches, navigate, useAction, useAdminData } from './hooks'
+import { DeleteCampaignButton } from './DeleteCampaignButton'
 
 const formatDate = (date: string | null) => date ? date.split('-').reverse().join('/') : 'Não configurado'
 const period = (c: Campaign) => c.dataInicio && c.dataFim ? formatDate(c.dataInicio) + ' a ' + formatDate(c.dataFim) : 'Período não configurado'
@@ -20,7 +21,7 @@ export function CampaignsPage() {
     {message && <Notice>{message}</Notice>}{error && <Notice>{error} <button onClick={reload}>Tentar novamente</button></Notice>}
     {creating && <CampaignEditor busy={busy} onCancel={() => setCreating(false)} onSave={async dto => { if (await run(() => adminApi('/campanhas', 'POST', dto))) setCreating(false) }} />}
     <Filters search={search} status={status} onSearch={setSearch} onStatus={setStatus} />
-    {loading ? <p role="status">Carregando campanhas…</p> : <div className="admin-table-wrap"><table><thead><tr><th>Campanha</th><th>Código</th><th>Período</th><th>Disponibilidade</th><th>Estado</th><th>Situação</th><th>Ações</th></tr></thead><tbody>{items.map(c => <tr key={c.id}><td><AdminLink href={`/admin/campanhas/${segment(c.codigo)}`}>{c.nome}</AdminLink></td><td>{c.codigo}</td><td>{period(c)}</td><td>{c.disponivelParaResposta ? "Recebendo respostas" : "Indisponível"}</td><td>{c.estado}</td><td><StatusBadge ativo={c.ativo} /></td><td><AdminLink href={`/admin/campanhas/${segment(c.codigo)}`}>Gerenciar →</AdminLink></td></tr>)}</tbody></table>{!items.length && <p>Nenhuma campanha encontrada.</p>}</div>}
+    {loading ? <p role="status">Carregando campanhas…</p> : <div className="admin-table-wrap"><table><thead><tr><th>Campanha</th><th>Código</th><th>Período</th><th>Disponibilidade</th><th>Estado</th><th>Situação</th><th>Ações</th></tr></thead><tbody>{items.map(c => <tr key={c.id}><td><AdminLink href={`/admin/campanhas/${segment(c.codigo)}`}>{c.nome}</AdminLink></td><td>{c.codigo}</td><td>{period(c)}</td><td>{c.disponivelParaResposta ? "Recebendo respostas" : "Indisponível"}</td><td>{c.estado}</td><td><StatusBadge ativo={c.ativo} /></td><td><div className="admin-actions"><AdminLink href={`/admin/campanhas/${segment(c.codigo)}`}>Gerenciar →</AdminLink><DeleteCampaignButton campaign={c.codigo} disabled={busy} onDeleted={reload} /></div></td></tr>)}</tbody></table>{!items.length && <p>Nenhuma campanha encontrada.</p>}</div>}
   </section>
 }
 
@@ -36,6 +37,7 @@ export function CampaignDetail({ campaign }: { campaign: string }) {
         <button className="secondary" disabled={busy} onClick={() => void run(() => adminApi(`${base}/status`, 'PATCH', { ativo: !data.ativo }), `${data.ativo ? 'Desativar' : 'Reativar'} a campanha? A disponibilidade de todos os seus formulários será afetada.`)}>{data.ativo ? 'Desativar' : 'Reativar'}</button>
         {(['aprovar', 'abrir', 'encerrar'] as const).map(action => <button key={action} disabled={busy || !data.ativo || (action === 'aprovar' ? data.estado !== 'RASCUNHO' : action === 'abrir' ? data.estado !== 'APROVADA' : data.estado === 'ENCERRADA')} onClick={() => void run(() => adminApi(`${base}/${action}`, 'POST'), `${action === 'aprovar' ? 'Aprovar' : action === 'abrir' ? 'Abrir' : 'Encerrar'} a campanha ${data.nome}?`)}>{action === 'aprovar' ? 'Aprovar' : action === 'abrir' ? 'Abrir pesquisa' : 'Encerrar'}</button>)}
       </div>
+      <div className="admin-callout"><p>Excluir a campanha apaga definitivamente seus formulários, respostas e comprovantes. Desativar preserva o histórico.</p><DeleteCampaignButton campaign={campaign} disabled={busy} onDeleted={() => navigate('/admin/campanhas')} /></div>
       {editing && <CampaignEditor item={data} busy={busy} onCancel={() => setEditing(false)} onSave={async dto => { if (await run(() => adminApi(base, 'PUT', dto), data.estado === 'ABERTA' ? 'Salvar altera??es? O período pode alterar imediatamente a disponibilidade da pesquisa.' : undefined)) setEditing(false) }} />}
       <div className="admin-callout"><h2>Formulários e versões</h2><p>Prepare os questionários em rascunho, publique as versões e aprove a campanha antes de abrir a pesquisa. Alterações de conteúdo retornam a campanha ao estado de rascunho.</p><AdminLink href={`/admin${base}/formularios`}>Gerenciar formulários →</AdminLink></div>
     </>}

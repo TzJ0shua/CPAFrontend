@@ -127,6 +127,10 @@ e atribua `cpa-admin` aos usuários da comissão. Veja também as instruções d
 existente no README do backend.
 
 O painel oferece campanhas, cursos, disciplinas e formulários versionados.
+Na listagem e nos detalhes da campanha, **Excluir campanha** permite apagar campanhas com ou sem respostas. O painel consulta os dados atuais e abre a confirmação nativa do navegador: informa quantas respostas estão vinculadas ou que não há respostas atreladas, e avisa que a campanha, formulários, versões, perguntas, opções, avaliações, respostas, comprovantes/QR Codes e autorizações de acesso serão apagados definitivamente. Cancelar não exclui nada. Os comprovantes da campanha excluída deixam de funcionar; cursos, disciplinas e outras campanhas são preservados. Use **Desativar** para preservar o histórico.
+
+Se novas respostas ou outros registros chegarem entre a consulta e a confirmação, o backend retorna `409` e o painel pede para consultar e confirmar novamente. Não há repetição automática da exclusão.
+
 Na listagem de formulários de uma campanha em rascunho ou aprovada, use **Clonar de outra campanha**. Escolha a campanha, o formulário e a versão de origem, incluindo campanhas encerradas ou inativas, e informe o código e nome da cópia. Será criado um novo formulário ativo, com versão 1 em rascunho e identificadores próprios; a campanha de destino volta ao estado de rascunho. O conteúdo e as respostas da origem permanecem preservados.
 
 No editor, **Remover pergunta** retira a pergunta do questionário. Perguntas já salvas são desativadas e podem ser recuperadas em **Mostrar perguntas desativadas**; perguntas novas ainda não salvas são descartadas. Salve para efetivar as alterações. Um rascunho pode ficar sem perguntas; a publicação e a edição de uma versão publicada exigem pelo menos uma pergunta ativa e opções ativas em cada pergunta ativa.
