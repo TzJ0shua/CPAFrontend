@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SurveyPage } from "./SurveyPage";
 import { fetchCampaignPublicState } from "../services/campaign-state-api";
@@ -8,18 +8,20 @@ vi.mock("../services/campaign-state-api", () => ({
 }));
 
 vi.mock("../components/survey/SurveyForm", () => ({
-  SurveyForm: () => <div data-testid="survey-form">survey-form</div>,
+  SurveyForm: ({ campaign }: { campaign: string }) => <div data-testid="survey-form">{campaign}</div>,
 }));
 
 describe("SurveyPage", () => {
   beforeEach(() => {
     vi.mocked(fetchCampaignPublicState).mockResolvedValue({
+      campaign: "cpa-2026",
       state: "ABERTA",
       isOpen: true,
     });
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     cleanup();
   });
@@ -34,6 +36,7 @@ describe("SurveyPage", () => {
 
   it("shows an unavailable message when the campaign is closed", async () => {
     vi.mocked(fetchCampaignPublicState).mockResolvedValueOnce({
+      campaign: "cpa-2026",
       state: "ENCERRADA",
       isOpen: false,
       unavailableMessage: "A campanha está encerrada para respostas.",
@@ -64,5 +67,31 @@ describe("SurveyPage", () => {
     expect(screen.queryByTestId("survey-form")).toBeNull();
 
     await waitFor(() => expect(fetchCampaignPublicState).toHaveBeenCalledTimes(1));
+  });
+
+  it("blocks expired campaigns on the periodic check and keeps the original campaign", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchCampaignPublicState).mockResolvedValueOnce({ campaign: "outubro", state: "ABERTA", isOpen: true });
+    render(<SurveyPage />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByTestId("survey-form").textContent).toBe("outubro");
+    vi.mocked(fetchCampaignPublicState).mockResolvedValue({ campaign: "outubro", state: "ABERTA", isOpen: false, unavailableMessage: "Período terminado." });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(fetchCampaignPublicState).toHaveBeenLastCalledWith("outubro");
+    expect(screen.queryByTestId("survey-form")).toBeNull();
+    expect(screen.getByText("Período terminado.")).not.toBeNull();
+    await act(async () => { fireEvent.focus(window); });
+    expect(fetchCampaignPublicState).toHaveBeenLastCalledWith("outubro");
+    expect(fetchCampaignPublicState).toHaveBeenCalledTimes(3);
+  });
+
+  it("discovers a campaign after an initially unavailable period when returning to the tab", async () => {
+    vi.mocked(fetchCampaignPublicState).mockResolvedValueOnce({ campaign: null, state: null, isOpen: false });
+    render(<SurveyPage />);
+    await screen.findByRole("heading", { name: "Pesquisa indisponível" });
+    vi.mocked(fetchCampaignPublicState).mockResolvedValue({ campaign: "novembro", state: "ABERTA", isOpen: true });
+    fireEvent(document, new Event("visibilitychange"));
+    expect((await screen.findByTestId("survey-form")).textContent).toBe("novembro");
+    expect(fetchCampaignPublicState).toHaveBeenLastCalledWith(undefined);
   });
 });

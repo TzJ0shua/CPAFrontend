@@ -42,6 +42,8 @@ export function SubjectStep({
         subtitle="Escolha uma ou mais disciplinas que você deseja avaliar."
       />
 
+      <p className="mb-5 text-sm text-slate-600">Selecione todas as disciplinas desejadas antes de enviar. Alunos e participantes que entram por email podem responder cada versão do formulário uma única vez.</p>
+
       <label className="mb-5 grid gap-2 text-sm font-bold text-slate-700">
         Buscar disciplina
         <input

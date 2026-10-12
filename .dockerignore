@@ -6,3 +6,6 @@ Dockerfile
 .dockerignore
 README.md
 npm-debug.log*
+.env*
+playwright-report
+test-results

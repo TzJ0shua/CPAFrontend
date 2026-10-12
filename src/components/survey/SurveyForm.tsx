@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildSurveyApiPayload } from "../../lib/survey-payload";
 import type {
   CatalogForm,
@@ -12,10 +12,13 @@ import { fetchCatalog, fetchFormCourses } from "../../services/catalog-api";
 import {
   confirmEmailVerification,
   requestEmailVerification,
+  authorizeMasterKey,
+  EmailVerificationError,
 } from "../../services/email-verification-api";
 import { fetchCampaignPublicState } from "../../services/campaign-state-api";
 import {
   submitSurvey,
+  fetchStudentProgress,
   type SubmitSurveyResult,
 } from "../../services/survey-api";
 import { ConfirmationStep } from "./steps/ConfirmationStep";
@@ -31,11 +34,13 @@ import { SubjectStep } from "./steps/SubjectStep";
 
 const emptyResponses = (): Respostas => ({ opcoes: {}, comentario: "" });
 
-export function SurveyForm() {
+export function SurveyForm({ campaign }: { campaign: string }) {
   const [step, setStep] = useState<Step>("participant");
   const [participantType, setParticipantType] =
     useState<ParticipantType | null>(null);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [cpf, setCpf] = useState("");
+  const [matricula, setMatricula] = useState("");
   const [forms, setForms] = useState<CatalogForm[]>([]);
   const [form, setForm] = useState<CatalogForm | null>(null);
   const [loadingForms, setLoadingForms] = useState(false);
@@ -47,6 +52,7 @@ export function SurveyForm() {
   >(null);
   const [verificationError, setVerificationError] = useState("");
   const [verificationLoading, setVerificationLoading] = useState(false);
+  const [emailUnavailable, setEmailUnavailable] = useState(false);
   const [courses, setCourses] = useState<Curso[]>([]);
   const [course, setCourse] = useState<Curso | null>(null);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
@@ -57,9 +63,13 @@ export function SurveyForm() {
   const [result, setResult] = useState<SubmitSurveyResult | null>(null);
   const [completedScopes, setCompletedScopes] = useState<string[]>([]);
   const [lastCompletedSubjects, setLastCompletedSubjects] = useState(0);
+  const [completedStudentForms, setCompletedStudentForms] = useState<string[]>([]);
+  const [journeyError, setJourneyError] = useState("");
+  const [checkingProgress, setCheckingProgress] = useState(false);
   const requestInFlight = useRef(false);
   const confirmationInFlight = useRef(false);
   const submissionInFlight = useRef(false);
+  const progressInFlight = useRef(false);
   const selectedSubjects = useMemo(
     () =>
       course?.materias.filter((subject) =>
@@ -70,21 +80,27 @@ export function SurveyForm() {
   const currentSubject = selectedSubjects[subjectIndex];
   const isStaffJourney =
     participantType === "professor" || participantType === "funcionario";
+  const isStudentJourney = participantType === "aluno";
   const currentFormIndex = form
     ? forms.findIndex(
         (item) => item.code === form.code && item.version === form.version,
       )
     : -1;
   const nextForm =
-    isStaffJourney && currentFormIndex >= 0
-      ? forms[currentFormIndex + 1]
+    currentFormIndex >= 0
+      ? forms.slice(currentFormIndex + 1).find(item => !isStudentJourney || !completedStudentForms.includes(`${item.code}:${item.version}`))
       : undefined;
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [step, form?.code, form?.version, subjectIndex]);
 
   const clearVerification = () => {
     setEmail("");
     setVerificationId(null);
     setEmailVerificationToken(null);
     setVerificationError("");
+    setEmailUnavailable(false);
   };
 
   const loadForms = useCallback(async () => {
@@ -92,11 +108,11 @@ export function SurveyForm() {
     setLoadingForms(true);
     setFormError("");
     try {
-      const catalog = await fetchCatalog(participantType);
+      const catalog = await fetchCatalog(participantType, campaign);
       setForms(catalog);
       setForm((current) =>
         current
-          ? (catalog.find((item) => item.code === current.code) ?? null)
+          ? (catalog.find((item) => item.code === current.code && item.version === current.version) ?? null)
           : current,
       );
       return catalog;
@@ -109,15 +125,15 @@ export function SurveyForm() {
     } finally {
       setLoadingForms(false);
     }
-  }, [participantType]);
+  }, [participantType, campaign]);
   const participantNext = async () => {
+    if (participantType === "aluno") {
+      await refreshStudentJourney(false);
+      return;
+    }
     const catalog = await loadForms();
     if (!catalog?.length) return;
     if (!participantType) return;
-    if (participantType === "aluno") {
-      setStep("form");
-      return;
-    }
     setForm(catalog[0]);
     setStep("email");
   };
@@ -135,24 +151,28 @@ export function SurveyForm() {
   };
   const selectParticipantType = (value: ParticipantType) => {
     if (value !== participantType) {
+      setCpf(""); setMatricula("");
       clearVerification();
       setForms([]);
       setForm(null);
       setFormError("");
+      setCompletedStudentForms([]);
+      setCompletedScopes([]);
+      setJourneyError("");
       resetAnswersForForm();
     }
     setParticipantType(value);
   };
-  const startForm = async (verified = false) => {
-    if (!form || !participantType) return;
-    if (participantType !== "aluno" && !emailVerificationToken && !verified) {
+  const startForm = async (target = form) => {
+    if (!target || !participantType) return;
+    if (participantType !== "aluno" && !emailVerificationToken) {
       setStep("email");
       return;
     }
     resetAnswersForForm();
-    if (form.scope === "DISCIPLINA") {
+    if (target.scope === "DISCIPLINA") {
       try {
-        setCourses(await fetchFormCourses(participantType));
+        setCourses(await fetchFormCourses(participantType, campaign));
         setStep("course");
       } catch (error) {
         setFormError(
@@ -163,6 +183,44 @@ export function SurveyForm() {
         setStep("form");
       }
     } else setStep("questionnaire");
+  };
+  const refreshStudentJourney = async (advance: boolean) => {
+    if (progressInFlight.current) return;
+    progressInFlight.current = true;
+    setCheckingProgress(true);
+    setJourneyError("");
+    try {
+      const catalog = await fetchCatalog("aluno", campaign);
+      const progress = await fetchStudentProgress(campaign, cpf, matricula, acceptedTerms);
+      const ordered = progress.formularios.map(item => {
+        const found = catalog.find(f => f.code === item.code && f.version === item.version);
+        if (!found) throw new Error("Os formulários foram atualizados. Consulte o progresso novamente.");
+        return found;
+      });
+      if (catalog.length !== ordered.length) throw new Error("Os formulários foram atualizados. Consulte o progresso novamente.");
+      const completed = progress.formularios.filter(item => item.respondido).map(item => `${item.code}:${item.version}`);
+      setForms(ordered);
+      setCompletedStudentForms(completed);
+      setCompletedScopes(ordered.filter(item => completed.includes(`${item.code}:${item.version}`)).map(item => item.name));
+      setFormError("");
+      if (progress.concluida) {
+        setResult({ ok: true, status: 200, message: "Você concluiu todas as avaliações da campanha. Tire uma captura de tela do QR Code para guardar seu comprovante.", proof: progress.proof });
+        clearAfterConfirmation();
+        setStep("confirmation");
+        return;
+      }
+      const pending = ordered.find(item => !completed.includes(`${item.code}:${item.version}`));
+      setForm(pending ?? null);
+      setResult(null);
+      if (!pending) throw new Error("Não há formulários disponíveis para seu público nesta campanha.");
+      if (advance) await startForm(pending);
+      else setStep("form");
+    } catch (error) {
+      setJourneyError(error instanceof Error ? error.message : "Não foi possível consultar seu progresso.");
+    } finally {
+      progressInFlight.current = false;
+      setCheckingProgress(false);
+    }
   };
   const requestCode = async (value: string) => {
     if (
@@ -186,6 +244,7 @@ export function SurveyForm() {
       setVerificationId(response.verificationId);
       setStep("pin");
     } catch (error) {
+      if (error instanceof EmailVerificationError && error.status === 503) setEmailUnavailable(true);
       setVerificationError(
         error instanceof Error
           ? error.message
@@ -197,6 +256,25 @@ export function SurveyForm() {
     }
   };
   const resend = () => requestCode(email);
+  const useMasterKey = async (chave: string) => {
+    if (requestInFlight.current || !form || !participantType || participantType === "aluno") return;
+    requestInFlight.current = true;
+    setVerificationLoading(true);
+    setVerificationError("");
+    setEmailVerificationToken(null);
+    try {
+      const response = await authorizeMasterKey(chave, participantType, form);
+      setEmailVerificationToken(response.submissionToken);
+      setVerificationId(null);
+      setEmail("");
+      await startAfterVerification();
+    } catch (error) {
+      setVerificationError(error instanceof Error ? error.message : "Não foi possível validar a chave mestra.");
+    } finally {
+      requestInFlight.current = false;
+      setVerificationLoading(false);
+    }
+  };
   const confirmCode = async (pin: string) => {
     if (confirmationInFlight.current || !verificationId) return;
     confirmationInFlight.current = true;
@@ -219,8 +297,13 @@ export function SurveyForm() {
       setVerificationLoading(false);
     }
   };
-  const startAfterVerification = async () => {
-    await startForm(true);
+  const startAfterVerification = () => {
+    // Access authorization belongs to the audience and campaign. The form sent
+    // to the access API is only its initial context, not the participant's choice.
+    resetAnswersForForm();
+    setForm(null);
+    setFormError("");
+    setStep("form");
   };
   const restartEmailVerification = () => {
     clearVerification();
@@ -233,7 +316,7 @@ export function SurveyForm() {
     let advancesToNextForm = false;
     let shouldShowConfirmation = true;
     try {
-      const campaignState = await fetchCampaignPublicState();
+      const campaignState = await fetchCampaignPublicState(campaign);
       if (!campaignState.isOpen) {
         setResult({
           ok: false,
@@ -257,8 +340,19 @@ export function SurveyForm() {
           subjects: selectedSubjects,
           responses,
           generalResponses,
+          studentIdentity: { cpf, matricula },
         }),
       );
+      if (isStudentJourney) {
+        shouldShowConfirmation = false;
+        if (submission.ok || submission.code === "FORMULARIO_JA_RESPONDIDO") {
+          setLastCompletedSubjects(selectedSubjects.length);
+          await refreshStudentJourney(true);
+        } else {
+          setJourneyError(submission.message + " Verifique seu progresso antes de continuar; o envio não será repetido automaticamente.");
+        }
+        return;
+      }
       if (submission.ok && nextForm) {
         setCompletedScopes((current) => [...current, form.name]);
         setLastCompletedSubjects(selectedSubjects.length);
@@ -268,7 +362,7 @@ export function SurveyForm() {
         setResult(null);
         if (nextForm.scope === "DISCIPLINA") {
           try {
-            setCourses(await fetchFormCourses(participantType));
+            setCourses(await fetchFormCourses(participantType, campaign));
             setStep("course");
           } catch (error) {
             setFormError(
@@ -279,6 +373,14 @@ export function SurveyForm() {
             setStep("form");
           }
         } else setStep("questionnaire");
+        return;
+      }
+      if (!submission.ok && submission.code === "FORMULARIO_JA_RESPONDIDO") {
+        shouldShowConfirmation = false;
+        setResult(null);
+        setForm(null);
+        setFormError("Você já respondeu esta versão do formulário nesta campanha. Escolha outro formulário ou uma nova versão publicada.");
+        setStep("form");
         return;
       }
       if (!submission.ok && [400, 404, 409, 422].includes(submission.status)) {
@@ -296,6 +398,11 @@ export function SurveyForm() {
       }
       setResult(submission);
     } catch {
+      if (isStudentJourney) {
+        shouldShowConfirmation = false;
+        setJourneyError("Não foi possível verificar o envio. Consulte seu progresso antes de continuar.");
+        return;
+      }
       setResult({
         ok: false,
         status: 0,
@@ -321,14 +428,14 @@ export function SurveyForm() {
     setCompletedScopes([]);
     setLastCompletedSubjects(0);
     if (participantType === "aluno") {
-      setForm(null);
-      setStep("form");
+      reset();
       return;
     }
     setForm(forms[0] ?? null);
     setStep("email");
   };
   const reset = () => {
+    setCpf(""); setMatricula("");
     setStep("participant");
     setParticipantType(null);
     setAcceptedTerms(false);
@@ -342,14 +449,25 @@ export function SurveyForm() {
     setResult(null);
     setCompletedScopes([]);
     setLastCompletedSubjects(0);
+    setCompletedStudentForms([]);
+    setJourneyError("");
   };
   const updateSubject = (subject: Materia, value: Respostas) =>
     setResponses((current) => ({ ...current, [subject.id]: value }));
 
   return (
     <main className="grid flex-1 place-items-center py-6 sm:py-10">
+      {journeyError ? <div role="alert" className="w-full max-w-2xl px-4 pb-6 text-center text-red-700">
+        <p>{journeyError}</p>
+        <button className="mt-3 rounded-lg bg-blue-700 px-4 py-3 font-bold text-white" disabled={checkingProgress} onClick={() => void refreshStudentJourney(step !== "participant" && step !== "form")}>Verificar progresso</button>
+      </div> : null}
       {step === "participant" ? (
         <ParticipantStep
+          busy={loadingForms || checkingProgress}
+          cpf={cpf}
+          matricula={matricula}
+          onCpfChange={setCpf}
+          onMatriculaChange={setMatricula}
           participantType={participantType}
           acceptedTerms={acceptedTerms}
           onParticipantTypeChange={selectParticipantType}
@@ -361,18 +479,22 @@ export function SurveyForm() {
       ) : null}
       {step === "form" ? (
         <FormSelectionStep
-          forms={isStaffJourney && form ? [form] : forms}
+          forms={forms}
+          sequential={isStudentJourney}
+          completed={completedStudentForms}
           selected={form}
-          loading={loadingForms}
+          loading={loadingForms || checkingProgress}
           error={formError}
-          onSelect={setForm}
-          onRetry={() => void loadForms()}
-          onBack={() => setStep("participant")}
+          onSelect={value => { setForm(value); setFormError(""); }}
+          onRetry={() => void (isStudentJourney ? refreshStudentJourney(false) : loadForms())}
+          onBack={() => { setJourneyError(""); setStep("participant"); }}
           onNext={() => void startForm()}
         />
       ) : null}
       {step === "email" ? (
         <EmailVerificationStep
+          emailUnavailable={emailUnavailable}
+          onMasterKey={useMasterKey}
           loading={verificationLoading}
           error={verificationError}
           onBack={reset}
@@ -400,9 +522,7 @@ export function SurveyForm() {
           isLoading={false}
           error=""
           onRetry={() => undefined}
-          onBack={() =>
-            isStaffJourney ? restartEmailVerification() : setStep("form")
-          }
+          onBack={() => setStep("form")}
           onNext={() => setStep("subjects")}
         />
       ) : null}
@@ -443,9 +563,7 @@ export function SurveyForm() {
               ? subjectIndex
                 ? setSubjectIndex(subjectIndex - 1)
                 : setStep("subjects")
-              : participantType === "aluno"
-                ? setStep("form")
-                : restartEmailVerification()
+              : setStep("form")
           }
           onNext={() => {
             if (
@@ -455,18 +573,19 @@ export function SurveyForm() {
               setSubjectIndex(subjectIndex + 1);
             else void submit();
           }}
-          isSubmitting={isSubmitting}
+          isSubmitting={isSubmitting || checkingProgress}
+          blocked={Boolean(journeyError)}
           isLast={
             form.scope !== "DISCIPLINA" ||
             subjectIndex === selectedSubjects.length - 1
           }
-          isFinalJourney={!isStaffJourney || !nextForm}
+          isFinalJourney={!nextForm}
           journeyPosition={
-            isStaffJourney && currentFormIndex >= 0
+            (isStaffJourney || isStudentJourney) && currentFormIndex >= 0
               ? currentFormIndex + 1
               : undefined
           }
-          journeyTotal={isStaffJourney ? forms.length : undefined}
+          journeyTotal={forms.length}
         />
       ) : null}
       {step === "confirmation" ? (

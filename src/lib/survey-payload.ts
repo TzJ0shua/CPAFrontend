@@ -18,10 +18,15 @@ interface BuildPayloadInput {
   form: CatalogForm; participantType: ParticipantType; acceptedTerms: boolean
   emailVerificationToken: string | null; course: Curso | null; subjects: Materia[]
   responses: Record<string, Respostas>; generalResponses: Respostas
+  studentIdentity?: { cpf: string; matricula: string }
 }
 
 export function buildSurveyApiPayload(input: BuildPayloadInput): SurveyApiPayload {
   const respondent: SurveyApiPayload['respondent'] = { type: input.participantType, aceiteTermosCondicoesServico: input.acceptedTerms }
+  if (input.participantType === 'aluno') {
+    respondent.cpf = input.studentIdentity?.cpf.replace(/\D/g, '') ?? ''
+    respondent.matricula = input.studentIdentity?.matricula ?? ''
+  }
   if (input.participantType !== 'aluno' && input.emailVerificationToken) {
     respondent.emailVerificationToken = input.emailVerificationToken
   }

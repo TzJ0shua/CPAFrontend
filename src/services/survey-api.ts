@@ -5,6 +5,7 @@ import { fetchWithRetry } from '../utils/fetch-with-retry'
 const SURVEY_API_ENDPOINT = buildApiEndpoint('/formulario')
 
 interface ApiSubmitResponse {
+  code?: string
   error?: string
   message?: string
   receipt?: string
@@ -23,10 +24,36 @@ export interface SubmitSurveyProof {
 }
 
 export interface SubmitSurveyResult {
+  code?: string
   ok: boolean
   status: number
   message: string
   proof?: SubmitSurveyProof
+}
+
+export interface StudentProgress {
+  formularios: { code: string; version: number; respondido: boolean }[]
+  concluida: boolean
+  proof?: SubmitSurveyProof
+}
+
+export async function fetchStudentProgress(campaign: string, cpf: string, matricula: string, acceptedTerms: boolean): Promise<StudentProgress> {
+  const response = await fetchWithRetry(buildApiEndpoint('/formulario/aluno/progresso'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, retries: 1,
+    body: JSON.stringify({ campaign, cpf: cpf.replace(/\D/g, ''), matricula, aceiteTermosCondicoesServico: acceptedTerms }),
+  })
+  if (!response.ok) throw new Error('Não foi possível consultar seu progresso. Confira CPF e matrícula e tente novamente.')
+  const body = await response.json() as {
+    formularios: StudentProgress['formularios']; concluida: boolean; comprovante?: ApiSubmitResponse
+  }
+  if (!Array.isArray(body.formularios) || typeof body.concluida !== 'boolean'
+      || body.formularios.some(item => typeof item.code !== 'string' || !Number.isInteger(item.version) || typeof item.respondido !== 'boolean')) {
+    throw new Error('Não foi possível consultar seu progresso.')
+  }
+  const proof = body.concluida ? normalizedProof(body.comprovante ?? null) : undefined
+  if (body.concluida && (!proof || body.formularios.length === 0 || body.formularios.some(item => !item.respondido)))
+    throw new Error('Não foi possível recuperar o comprovante da campanha.')
+  return { formularios: body.formularios, concluida: body.concluida, proof }
 }
 
 async function readJsonOrText(response: Response) {
@@ -94,6 +121,12 @@ export async function submitSurvey(payload: SurveyApiPayload): Promise<SubmitSur
     }
   }
 
+  if (response.status === 409 && responseBody?.code === 'FORMULARIO_JA_RESPONDIDO') return {
+    ok: false, status: 409, code: 'FORMULARIO_JA_RESPONDIDO', message: 'Você já respondeu esta versão do formulário nesta campanha.',
+  }
+  if (response.status === 503 && responseBody?.code === 'IDENTIFICACAO_INDISPONIVEL') return {
+    ok: false, status: 503, code: 'IDENTIFICACAO_INDISPONIVEL', message: 'A identificação de alunos está indisponível no momento. Tente novamente mais tarde.',
+  }
   return {
     ok: false,
     status: response.status,

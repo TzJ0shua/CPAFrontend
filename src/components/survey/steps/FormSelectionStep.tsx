@@ -12,6 +12,8 @@ interface Props {
   onRetry: () => void;
   onBack: () => void;
   onNext: () => void;
+  sequential?: boolean;
+  completed?: string[];
 }
 export function FormSelectionStep({
   forms,
@@ -22,15 +24,17 @@ export function FormSelectionStep({
   onRetry,
   onBack,
   onNext,
+  sequential = false,
+  completed = [],
 }: Props) {
   return (
     <section className="survey-enter w-full max-w-2xl px-4 sm:px-6">
       <div className="mb-8 space-y-3 text-center sm:mb-10">
         <h2 className="text-3xl font-black text-slate-950 sm:text-4xl">
-          Selecione a avaliação
+          {sequential ? "Sua sequência de avaliações" : "Selecione a avaliação"}
         </h2>
         <p className="text-slate-600">
-          Escolha o formulário disponível para o seu público.
+          {sequential ? "Preencha os formulários pendentes na ordem indicada. O QR Code será liberado após concluir todos." : "Escolha o formulário disponível para o seu público."}
         </p>
       </div>
       <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-900/10 sm:p-8">
@@ -48,10 +52,13 @@ export function FormSelectionStep({
             <button
               className={`rounded-xl border p-4 text-left transition sm:p-5 ${selected?.code === form.code && selected.version === form.version ? "border-blue-700 bg-blue-50 ring-2 ring-blue-700/10" : "border-slate-200 hover:border-blue-300"}`}
               key={`${form.code}-${form.version}`}
+              disabled={sequential || loading}
               onClick={() => onSelect(form)}
             >
               <strong className="block text-slate-950">{form.name}</strong>
+              {sequential ? <span className="text-sm font-semibold text-blue-700">{completed.includes(`${form.code}:${form.version}`) ? "Concluído" : selected?.code === form.code && selected.version === form.version ? "Próximo formulário" : "Pendente"}</span> : null}
               <small className="mt-2 block leading-relaxed text-slate-500">
+                Versão {form.version} · {" "}
                 {form.scope === "DISCIPLINA"
                   ? "Avaliação por disciplina"
                   : "Avaliação geral"}
@@ -59,8 +66,9 @@ export function FormSelectionStep({
             </button>
           ))}
         </div>
+        {selected?.audience === "aluno" && selected.scope === "DISCIPLINA" ? <p className="text-sm text-slate-600">Selecione todas as disciplinas que deseja avaliar. Cada aluno pode enviar esta versão uma única vez.</p> : null}
         <Actions>
-          <Button variant="secondary" onClick={onBack}>
+          <Button variant="secondary" disabled={loading} onClick={onBack}>
             Voltar
           </Button>
           <Button

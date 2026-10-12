@@ -20,6 +20,7 @@ interface Props {
   onBack: () => void;
   onNext: () => void;
   isSubmitting: boolean;
+  blocked?: boolean;
   isLast: boolean;
   isFinalJourney: boolean;
   journeyPosition?: number;
@@ -33,6 +34,7 @@ export function QuestionnaireStep({
   onBack,
   onNext,
   isSubmitting,
+  blocked = false,
   isLast,
   isFinalJourney,
   journeyPosition,
@@ -115,6 +117,7 @@ export function QuestionnaireStep({
             ) : null}
             <textarea
               className="min-h-32 rounded-lg border border-slate-300 p-3 text-base font-normal"
+              maxLength={1000}
               required={isCommentRequired(form)}
               value={respostas.comentario}
               onChange={(e) =>
@@ -128,7 +131,7 @@ export function QuestionnaireStep({
         <Button variant="secondary" disabled={isSubmitting} onClick={onBack}>
           Voltar
         </Button>
-        <Button disabled={!complete || isSubmitting} onClick={onNext}>
+        <Button disabled={!complete || isSubmitting || blocked} onClick={onNext}>
           {isSubmitting
             ? "Enviando..."
             : isLast
