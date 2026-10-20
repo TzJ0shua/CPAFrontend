@@ -64,6 +64,10 @@ async function mockServices(page: Page, role = 'cpa-admin', state = 'PUBLICADA',
     }
     let json: unknown = []
     if (path === '/admin/cursos') json = courses
+    else if (path.endsWith('/resultados')) json = [
+      { avaliacao: 1, participante: 'Participante 1', publico: 'aluno', formulario: 'geral', formularioNome: 'Avaliação institucional', versao: 1, curso: null, disciplina: null, professor: null, perguntaId: 'q1', pergunta: 'A instituição oferece uma boa experiência de aprendizagem?', nota: 5, opcao: 'Concordo totalmente', naoSeiResponder: false, comentario: '=Teste de comentário' },
+      { avaliacao: 2, participante: 'Participante 2', publico: 'professor', formulario: 'docente', formularioNome: 'Avaliação docente', versao: 1, curso: null, disciplina: null, professor: null, perguntaId: 'q1', pergunta: 'Como avalia a estrutura?', nota: null, opcao: null, naoSeiResponder: true, comentario: null },
+    ]
     else if (path === '/admin/disciplinas') json = [{ id: 1, nome: 'Planejamento e Controle da Produção', professor: 'Maria Silva', cursoId: 1, cursoNome: courses[0].nome, cursoAtivo: true, ativo: true }]
     else if (path === '/admin/campanhas') json = campaigns
     else if (/^\/admin\/campanhas\/[^/]+$/.test(path)) json = campaigns.find(c => c.codigo === decodeURIComponent(path.split('/')[3]))
@@ -282,4 +286,78 @@ test('edita versão publicada sem clonar nem fechar a campanha aberta', async ({
   expect(campaigns[0].estado).toBe('ABERTA')
   await page.screenshot({ path: testInfo.outputPath('editar-versao-publicada.png'), fullPage: true })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('resultados no painel, filtros e exportação Excel', async ({ page }, testInfo) => {
+  await mockServices(page)
+  await page.goto('/admin')
+  await expect(page.getByRole('heading', { name: 'Resultados das campanhas ativas' })).toBeVisible()
+  await expect(page.getByText('Concordo totalmente', { exact: true })).toBeVisible()
+  await page.getByRole('link', { name: 'Campanhas', exact: true }).click()
+  await page.getByRole('link', { name: 'Ver resultados' }).click()
+  await expect(page.getByRole('heading', { name: 'Resultados da campanha' })).toBeVisible()
+  await page.getByRole('combobox', { name: 'Formulário', exact: true }).selectOption('geral')
+  await page.getByRole('combobox', { name: 'Tipo de participante', exact: true }).selectOption('aluno')
+  await expect(page.getByRole('heading', { name: 'Como avalia a estrutura?' })).toHaveCount(0)
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Exportar Excel' }).click()
+  const download = await downloadPromise
+  const file = testInfo.outputPath(download.suggestedFilename())
+  await download.saveAs(file)
+  const { default: ExcelJS } = await import('exceljs')
+  const book = new ExcelJS.Workbook()
+  await book.xlsx.readFile(file)
+  expect(book.getWorksheet('Respostas')?.rowCount).toBe(2)
+  expect(book.getWorksheet('Respostas')?.getRow(2).getCell(4).value).toBe('Aluno')
+  expect(book.getWorksheet('Comentários')?.getRow(2).getCell(5).value).toBe('=Teste de comentário')
+  expect(book.getWorksheet('Comentários')?.getRow(2).getCell(5).type).toBe(3)
+  await page.screenshot({ path: testInfo.outputPath('resultados.png'), fullPage: true })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('gráficos alternativos e origem dos dados', async ({ page }, testInfo) => {
+  await mockServices(page)
+  const options = [
+    { nota: 1, opcao: 'Discordo totalmente', naoSeiResponder: false },
+    { nota: 2, opcao: 'Discordo parcialmente', naoSeiResponder: false },
+    { nota: 4, opcao: 'Concordo parcialmente', naoSeiResponder: false },
+    { nota: 5, opcao: 'Concordo totalmente', naoSeiResponder: false },
+    { nota: null, opcao: 'Não sei responder', naoSeiResponder: true },
+  ]
+  const rows = options.flatMap((option, i) => [1, 2].map(q => ({
+    avaliacao: i + 1, participante: `Participante ${i + 1}`, publico: 'aluno',
+    formulario: 'geral', formularioNome: 'Instituição', versao: 1,
+    curso: null, disciplina: null, professor: null,
+    perguntaId: `q${q}`, pergunta: q === 1 ? 'Como avalia a instituição?' : 'Como avalia a comunicação?',
+    ...option, comentario: null, demonstracao: i > 0,
+  })))
+  await page.route('http://127.0.0.1:8199/admin/campanhas/cpa-2026/resultados', route => route.fulfill({
+    json: rows, headers: { 'Access-Control-Allow-Origin': 'http://127.0.0.1:5194' },
+  }))
+  await page.goto('/admin/campanhas/cpa-2026/resultados')
+  await expect(page.getByRole('note')).toContainText('4 avaliações fictícias')
+  await page.getByRole('button', { name: 'Roscas', exact: true }).click()
+  await expect(page.getByRole('img', { name: /Distribuição de 5 respostas/ })).toHaveCount(2)
+  await expect(page.getByRole('img', { name: /Não sei responder: 1, 20.0%/ })).toHaveCount(2)
+  await page.screenshot({ path: testInfo.outputPath('roscas.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Mapa de calor', exact: true }).click()
+  await expect(page.getByRole('table')).toBeVisible()
+  await expect(page.getByRole('cell', { name: '20.0% 1 de 5', exact: true })).toHaveCount(10)
+  await page.screenshot({ path: testInfo.outputPath('mapa-de-calor.png'), fullPage: true })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.getByRole('combobox', { name: 'Origem dos dados' }).selectOption('true')
+  await expect(page.getByRole('cell', { name: '25.0% 1 de 4', exact: true })).toHaveCount(8)
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Exportar Excel' }).click()
+  const download = await downloadPromise
+  const file = testInfo.outputPath(download.suggestedFilename())
+  await download.saveAs(file)
+  const { default: ExcelJS } = await import('exceljs')
+  const book = new ExcelJS.Workbook()
+  await book.xlsx.readFile(file)
+  const sheet = book.getWorksheet('Respostas')!
+  expect(sheet.rowCount).toBe(9)
+  for (let i = 2; i <= sheet.rowCount; i++) expect(sheet.getRow(i).getCell(14).value).toBe('Demonstração')
+  await page.getByRole('combobox', { name: 'Origem dos dados' }).selectOption('false')
+  await expect(page.getByRole('cell', { name: '100.0% 1 de 1', exact: true })).toHaveCount(2)
 })

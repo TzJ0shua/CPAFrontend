@@ -4,6 +4,7 @@ import { AdminLink, Notice } from './ui'
 import { AcademicPage } from './AcademicPage'
 import { CampaignsPage, CampaignDetail } from './CampaignsPage'
 import { FormsPage, VersionPage } from './FormsPage'
+import { ActiveResults, ResultsPage } from './ResultsPage'
 import './admin.css'
 
 export function AdminApp({ pathname }: { pathname: string }) {
@@ -35,14 +36,15 @@ export function AdminApp({ pathname }: { pathname: string }) {
     try { parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean).map(decodeURIComponent) } catch { /* Show not found for malformed URLs. */ }
     const campaign = parts[2]
     const form = parts[4]
-    if (parts.length === 1) content = <section className="admin-card"><p className="admin-eyebrow">COMISSÃO PRÓPRIA DE AVALIAÇÃO</p><h1>Painel administrativo</h1><p>Organize os cadastros e prepare as campanhas de avaliação institucional.</p><div className="admin-dashboard">
+    if (parts.length === 1) content = <><section className="admin-card"><p className="admin-eyebrow">COMISSÃO PRÓPRIA DE AVALIAÇÃO</p><h1>Painel administrativo</h1><p>Organize os cadastros e prepare as campanhas de avaliação institucional.</p><div className="admin-dashboard">
       <AdminLink href="/admin/campanhas"><h2>Campanhas e formulários</h2><p>Questionários, versões e disponibilidade da pesquisa.</p></AdminLink>
       <AdminLink href="/admin/cursos"><h2>Cursos</h2><p>Cadastros acadêmicos utilizados na avaliação.</p></AdminLink>
       <AdminLink href="/admin/disciplinas"><h2>Disciplinas</h2><p>Disciplinas, professores e vínculos com os cursos.</p></AdminLink>
-    </div></section>
+    </div></section><ActiveResults /></>
     else if (parts[1] === 'cursos' && parts.length === 2) content = <AcademicPage key="courses" kind="cursos" />
     else if (parts[1] === 'disciplinas' && parts.length === 2) content = <AcademicPage key="subjects" kind="disciplinas" />
     else if (parts[1] === 'campanhas' && parts.length === 2) content = <CampaignsPage />
+    else if (parts[1] === 'campanhas' && parts[3] === 'resultados' && parts.length === 4) content = <ResultsPage key={campaign} campaign={campaign} />
     else if (parts[1] === 'campanhas' && parts.length === 3) content = <CampaignDetail key={campaign} campaign={campaign} />
     else if (parts[1] === 'campanhas' && parts[3] === 'formularios' && (parts.length === 4 || parts.length === 5)) content = <FormsPage key={`${campaign}/${form || ''}`} campaign={campaign} form={form} />
     else if (parts[1] === 'campanhas' && parts[3] === 'formularios' && parts[5] === 'versoes' && parts.length === 7 && /^\d+$/.test(parts[6])) content = <VersionPage key={pathname} campaign={campaign} form={form} number={Number(parts[6])} />
